@@ -1,5 +1,12 @@
 <?php
 declare(strict_types=1);
+session_set_cookie_params([
+    'lifetime' => 0,
+    'path'     => '/',
+    'httponly' => true,
+    'samesite' => 'Lax',
+    'secure'   => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off',
+]);
 session_start();
 require_once __DIR__ . '/../config/db.php';
 
@@ -63,3 +70,63 @@ function badge_statut(string $s): string {
 
 /** Seuil de cellules (milliers/mL) au-delà duquel on alerte – mammite subclinique */
 const SEUIL_CELLULES = 300;
+
+// ------------------------------------------------------------------
+// Authentification
+// ------------------------------------------------------------------
+const ROLES = ['admin' => ['Administrateur', 'danger'], 'eleveur' => ['Éleveur', 'success'], 'veterinaire' => ['Vétérinaire', 'info']];
+const LOGIN_MAX_ESSAIS = 5;     // tentatives avant blocage temporaire
+const LOGIN_BLOCAGE    = 300;   // durée du blocage (secondes)
+const SESSION_INACTIVITE = 7200; // déconnexion automatique après 2 h d'inactivité
+
+/** Utilisateur connecté ou null */
+function user(): ?array { return $_SESSION['user'] ?? null; }
+
+/** Ouvre la session de l'utilisateur après vérification du mot de passe */
+function login_user(array $u): void {
+    session_regenerate_id(true);
+    $_SESSION['user'] = ['id' => (int)$u['id'], 'nom' => $u['nom'], 'email' => $u['email'], 'role' => $u['role']];
+    $_SESSION['last_activity'] = time();
+    unset($_SESSION['login_essais'], $_SESSION['login_bloque_jusqua']);
+}
+
+function logout_user(): void {
+    $_SESSION = [];
+    if (ini_get('session.use_cookies')) {
+        $p = session_get_cookie_params();
+        setcookie(session_name(), '', time() - 42000, $p['path'], $p['domain'], $p['secure'], $p['httponly']);
+    }
+    session_destroy();
+}
+
+/** Redirige vers la page de connexion si personne n'est connecté */
+function require_login(): void {
+    if (user() && time() - ($_SESSION['last_activity'] ?? 0) > SESSION_INACTIVITE) {
+        logout_user();
+        session_start();
+        flash('Votre session a expiré, veuillez vous reconnecter.', 'warning');
+    }
+    if (!user()) {
+        $retour = $_SERVER['REQUEST_METHOD'] === 'GET' ? ($_SERVER['REQUEST_URI'] ?? '') : '';
+        redirect('login.php' . ($retour ? '?retour=' . urlencode($retour) : ''));
+    }
+    $_SESSION['last_activity'] = time();
+}
+
+/** Restreint une page à certains rôles */
+function require_role(string ...$roles): void {
+    require_login();
+    if (!in_array(user()['role'], $roles, true)) { http_response_code(403); exit('Accès refusé.'); }
+}
+
+/** URL de retour sûre (chemin relatif interne uniquement) */
+function safe_retour(?string $url): string {
+    $url = (string)$url;
+    // Accepte "/chemin…" (mais pas "//domaine" ni "/\domaine") ou "page.php…"
+    $interne = preg_match('#^/(?![/\x5c])#', $url) || preg_match('#^[a-z0-9_]+\.php(\?|$)#i', $url);
+    if (!$interne || str_contains($url, 'login.php') || str_contains($url, 'logout.php')) return 'index.php';
+    return $url;
+}
+
+// Toutes les pages sont protégées, sauf celles déclarées publiques
+if (!defined('PAGE_PUBLIQUE')) require_login();

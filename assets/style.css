@@ -18,3 +18,4 @@ body { background: #f4f6f3; }
   body { background: #fff; }
   .card { box-shadow: none; border: 1px solid #ddd; }
 }
+.avatar-initiale { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: 50%; background: rgba(255,255,255,.2); font-weight: 600; }

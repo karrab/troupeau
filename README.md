@@ -7,11 +7,22 @@ Application PHP 8 / MySQL / Bootstrap 5 pour bovins, ovins et caprins.
 2. Importer `database.sql` dans phpMyAdmin (crée la base `troupeau` + données de démonstration).
 3. Adapter `config/db.php` (hôte, utilisateur, mot de passe).
 4. Vérifier que le dossier `uploads/` est accessible en écriture (photos).
-5. Ouvrir `http://localhost/troupeau/`.
+5. Ouvrir `http://localhost/troupeau/` : vous êtes redirigé vers la page de connexion.
+
+### Comptes de démonstration
+| E-mail | Mot de passe | Rôle |
+|---|---|---|
+| `admin@troupeau.local` | `admin123` | Administrateur |
+| `eleveur@troupeau.local` | `eleveur123` | Éleveur |
+
+> Changez ces mots de passe en production. Pour créer un compte :
+> `php -r 'echo password_hash("MonMotDePasse", PASSWORD_DEFAULT);'` puis
+> `INSERT INTO utilisateurs (nom, email, mot_de_passe, role) VALUES ('Nom', 'email@exemple.com', '<hash>', 'eleveur');`
 
 ## Modules
 | Page | Rôle |
 |---|---|
+| `login.php` / `logout.php` | Connexion personnalisée (Bootstrap 5) et déconnexion |
 | `index.php` | Tableau de bord : effectifs, lait moyen, TB/TP, alertes (cellules, délais d'attente, mises bas, rappels) |
 | `animaux.php` | Liste filtrable (espèce, lot, sexe, statut) |
 | `animal.php` | **Fiche animal** : identité, généalogie, descendance, poids + GMQ, contrôle laitier, reproduction, santé, mouvements, impression |
@@ -32,4 +43,7 @@ Application PHP 8 / MySQL / Bootstrap 5 pour bovins, ovins et caprins.
 
 ## Sécurité
 Requêtes préparées PDO, échappement HTML, jeton CSRF sur tous les formulaires, contrôle du type des photos.
-La table `utilisateurs` est prête pour ajouter une connexion avec `password_hash()`.
+**Authentification** : toutes les pages exigent une connexion (`require_login()` appelé automatiquement dans `includes/functions.php`, sauf si la page définit `PAGE_PUBLIQUE`).
+Mots de passe `password_hash()` / `password_verify()`, régénération de l'identifiant de session, cookie `HttpOnly` + `SameSite=Lax`,
+blocage de 5 min après 5 échecs, expiration après 2 h d'inactivité, redirection vers la page demandée après connexion.
+`require_role('admin')` permet de réserver une page à certains rôles.

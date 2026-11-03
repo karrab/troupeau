@@ -23,6 +23,28 @@
         <li class="nav-item"><a class="nav-link <?= $page==='parametres'?'active':'' ?>" href="parametres.php"><i class="bi bi-gear"></i> Paramètres</a></li>
       </ul>
       <a href="animal_form.php" class="btn btn-light btn-sm"><i class="bi bi-plus-lg"></i> Nouvel animal</a>
+      <?php if ($u = user()): [$roleLib, $roleCol] = ROLES[$u['role']] ?? [$u['role'], 'secondary']; ?>
+      <div class="dropdown ms-lg-3 mt-2 mt-lg-0">
+        <a class="nav-link dropdown-toggle text-white d-flex align-items-center gap-2" href="#" data-bs-toggle="dropdown" aria-expanded="false">
+          <span class="avatar-initiale"><?= e(mb_strtoupper(mb_substr($u['nom'], 0, 1))) ?></span>
+          <span class="d-lg-none d-xl-inline"><?= e($u['nom']) ?></span>
+        </a>
+        <ul class="dropdown-menu dropdown-menu-end shadow-sm">
+          <li class="px-3 py-2">
+            <div class="fw-semibold"><?= e($u['nom']) ?></div>
+            <div class="small text-muted"><?= e($u['email']) ?></div>
+            <span class="badge text-bg-<?= $roleCol ?> mt-1"><?= $roleLib ?></span>
+          </li>
+          <li><hr class="dropdown-divider"></li>
+          <li>
+            <form method="post" action="logout.php" class="m-0">
+              <?= csrf_field() ?>
+              <button type="submit" class="dropdown-item text-danger"><i class="bi bi-box-arrow-right"></i> Déconnexion</button>
+            </form>
+          </li>
+        </ul>
+      </div>
+      <?php endif; ?>
     </div>
   </div>
 </nav>

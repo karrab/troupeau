@@ -234,3 +234,10 @@ INSERT INTO mouvements (animal_id, date_mouvement, type, lot_origine, lot_destin
  (2,'2023-09-15','entree',NULL,1,'Achat élevage voisin',4200),
  (3,'2021-01-20','entree',NULL,4,'Achat reproducteur',6500),
  (4,'2026-05-15','transfert',1,2,'Sevrage',NULL);
+
+-- Comptes de démonstration (à modifier en production !)
+--   admin@troupeau.local   / admin123
+--   eleveur@troupeau.local / eleveur123
+INSERT INTO utilisateurs (nom, email, mot_de_passe, role) VALUES
+ ('Administrateur','admin@troupeau.local','$2y$10$AbML13Tl02V1Bdxbd9Tcy.7TUuYOCpX3dvbG70yqDDewB50MwAwbO','admin'),
+ ('Éleveur démo','eleveur@troupeau.local','$2y$10$P1KQUDLl9JK3bHVjd/k/NeHF5H3rUb00.icLMBZ2LgI5gX9GjkXgS','eleveur');
