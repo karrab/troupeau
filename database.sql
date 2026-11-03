@@ -178,62 +178,66 @@ CREATE TABLE utilisateurs (
 -- =====================================================================
 --  Données de démonstration
 -- =====================================================================
+-- Élevage caprin : chèvres, chevreaux et bouc
 INSERT INTO especes (id, nom, gestation_jours) VALUES
- (1,'Bovin',283),(2,'Ovin',150),(3,'Caprin',150);
+ (1,'Caprin',150);
 
 INSERT INTO races (id, espece_id, nom) VALUES
- (1,1,'Holstein'),(2,1,'Montbéliarde'),(3,1,'Brune des Alpes'),
- (4,2,'Lacaune'),(5,2,'Sicilo-Sarde'),
- (6,3,'Alpine'),(7,3,'Saanen');
+ (1,1,'Alpine'),(2,1,'Saanen'),(3,1,'Poitevine');
 
 INSERT INTO lots (id, nom, type, description) VALUES
- (1,'Étable A','batiment','Vaches en lactation'),
- (2,'Étable B','batiment','Génisses et veaux'),
- (3,'Bergerie','batiment','Ovins'),
- (4,'Pâturage nord','paturage','Parcelle de 6 ha');
+ (1,'Chèvrerie','batiment','Chèvres en lactation'),
+ (2,'Nurserie','batiment','Chevreaux'),
+ (3,'Parc des boucs','lot','Reproducteurs'),
+ (4,'Parcours sud','paturage','Parcelle de 3 ha');
 
 INSERT INTO animaux (id, numero_identification, nom, espece_id, race_id, sexe, categorie, robe, date_naissance, poids_naissance, mere_id, pere_id, origine, date_entree, prix_achat, lot_id) VALUES
- (1,'BV-0001','Bella', 1,1,'F','vache',   'Pie noire', '2020-03-12',38,NULL,NULL,'naissance','2020-03-12',NULL,1),
- (2,'BV-0002','Rose',  1,2,'F','vache',   'Pie rouge', '2019-05-02',42,NULL,NULL,'achat',    '2023-09-15',4200,1),
- (3,'BV-0003','Titan', 1,1,'M','taureau', 'Pie noire', '2018-02-10',45,NULL,NULL,'achat',    '2021-01-20',6500,4),
- (4,'BV-0004','Perle', 1,1,'F','veau',    'Pie noire', '2026-02-15',40,1,3,      'naissance','2026-02-15',NULL,2),
- (5,'OV-0001','Blanche',2,4,'F','brebis', 'Blanche',   '2022-01-20',4.5,NULL,NULL,'naissance','2022-01-20',NULL,3),
- (6,'OV-0002','Hercule',2,4,'M','bélier', 'Blanche',   '2021-12-05',5,NULL,NULL,'achat',    '2023-03-01',900,3);
+ (1,'CP-0001','Noisette',1,1,'F','chèvre',  'Chamoisée','2021-02-10',3.4,NULL,NULL,'naissance','2021-02-10',NULL,1),
+ (2,'CP-0002','Câline',  1,2,'F','chèvre',  'Blanche',  '2020-03-05',3.8,NULL,NULL,'achat',    '2023-10-01',250, 1),
+ (3,'CP-0003','Hercule', 1,1,'M','bouc',    'Chamoisée','2019-01-20',4.0,NULL,NULL,'achat',    '2022-09-15',400, 3),
+ (4,'CP-0004','Pipo',    1,1,'M','chevreau','Chamoisée','2026-02-20',3.6,1,   3,   'naissance','2026-02-20',NULL,2),
+ (5,'CP-0005','Mimi',    1,1,'F','chevreau','Chamoisée','2026-02-20',3.2,1,   3,   'naissance','2026-02-20',NULL,2);
 
 INSERT INTO pesees (animal_id, date_pesee, poids, note_etat_corporel, methode) VALUES
- (4,'2026-02-15', 40,NULL,'balance'),(4,'2026-04-15', 85,3.0,'balance'),(4,'2026-06-15',135,3.0,'balance'),
- (4,'2026-08-15',180,3.0,'balance'),(4,'2026-10-15',222,3.5,'balance'),
- (1,'2026-01-10',620,3.5,'ruban'),(1,'2026-05-10',590,2.5,'ruban'),(1,'2026-09-10',640,3.0,'ruban'),
- (2,'2026-03-01',610,3.0,'ruban'),(2,'2026-09-01',600,2.75,'ruban'),
- (5,'2026-04-01',62,3.0,'balance');
+ (4,'2026-02-20', 3.6,NULL,'balance'),(4,'2026-03-20', 9.5,3.0,'balance'),(4,'2026-04-20',15.0,3.0,'balance'),
+ (4,'2026-06-20',22.0,3.0,'balance'),(4,'2026-08-20',28.0,3.0,'balance'),(4,'2026-10-20',33.0,3.5,'balance'),
+ (5,'2026-02-20', 3.2,NULL,'balance'),(5,'2026-03-20', 8.8,3.0,'balance'),(5,'2026-04-20',14.0,3.0,'balance'),
+ (5,'2026-06-20',20.5,3.0,'balance'),(5,'2026-08-20',26.0,3.0,'balance'),(5,'2026-10-20',30.5,3.0,'balance'),
+ (1,'2026-01-15',64,3.5,'balance'),(1,'2026-05-15',58,2.5,'balance'),(1,'2026-09-15',63,3.0,'balance'),
+ (2,'2026-03-01',72,3.0,'balance'),(2,'2026-09-01',69,2.75,'balance'),
+ (3,'2026-08-25',88,3.5,'balance');
 
 INSERT INTO controles_laitiers (animal_id, date_controle, traite_matin, traite_soir, taux_butyreux, taux_proteique, cellules) VALUES
- (1,'2026-03-01',18.0,16.0,38.5,31.0,120),(1,'2026-04-01',20.0,18.0,37.8,30.5,95),
- (1,'2026-05-01',19.0,17.0,38.2,31.2,110),(1,'2026-06-01',17.5,16.0,39.0,31.8,140),
- (1,'2026-07-01',16.0,15.0,39.6,32.4,160),(1,'2026-08-01',15.0,13.5,40.1,33.0,150),
- (1,'2026-09-01',13.0,12.0,41.0,33.6,180),(1,'2026-10-01',12.0,10.5,41.8,34.2,210),
- (2,'2026-06-01',14.0,13.0,40.0,33.0,180),(2,'2026-07-01',16.0,14.0,39.5,32.8,200),
- (2,'2026-08-01',15.0,14.0,39.8,33.1,260),(2,'2026-09-01',14.0,12.5,40.5,33.5,350),
- (2,'2026-10-01',13.0,12.0,41.0,33.9,520);
+ (1,'2026-03-15',1.6,1.4,34.5,31.0,450),(1,'2026-04-15',1.9,1.6,33.8,30.5,380),
+ (1,'2026-05-15',1.8,1.5,34.2,31.2,420),(1,'2026-06-15',1.7,1.4,35.0,31.8,500),
+ (1,'2026-07-15',1.5,1.3,35.6,32.4,560),(1,'2026-08-15',1.3,1.1,36.1,33.0,610),
+ (1,'2026-09-15',1.1,1.0,37.0,33.6,700),(1,'2026-10-15',1.0,0.8,37.8,34.2,760),
+ (2,'2026-04-15',2.0,1.7,32.0,29.8,520),(2,'2026-05-15',2.2,1.9,31.5,29.5,600),
+ (2,'2026-06-15',2.1,1.8,31.8,29.9,680),(2,'2026-07-15',1.9,1.6,32.5,30.4,900),
+ (2,'2026-08-15',1.7,1.4,33.0,30.8,1250),(2,'2026-09-15',1.5,1.2,33.6,31.2,1600),
+ (2,'2026-10-15',1.2,1.0,34.2,31.8,1900);
 
 INSERT INTO reproductions (animal_id, type_evenement, date_evenement, male_id, semence, resultat, nb_petits, date_mise_bas_prevue, intervenant) VALUES
- (1,'insemination','2025-05-08',NULL,'HO-Taureau 4512',NULL,NULL,'2026-02-15','Inséminateur coop.'),
- (1,'diagnostic',  '2025-06-20',NULL,NULL,'positif',NULL,NULL,'Dr Vétérinaire'),
- (1,'mise_bas',    '2026-02-15',NULL,NULL,NULL,1,NULL,NULL),
- (1,'insemination','2026-05-05',NULL,'HO-Taureau 4512',NULL,NULL,'2027-02-12','Inséminateur coop.'),
- (1,'diagnostic',  '2026-06-20',NULL,NULL,'positif',NULL,NULL,'Dr Vétérinaire'),
- (2,'mise_bas',    '2026-05-10',NULL,NULL,NULL,1,NULL,NULL),
- (5,'saillie',     '2026-07-10',6,NULL,NULL,NULL,'2026-12-07',NULL);
+ (1,'saillie',   '2025-09-23',3,NULL,NULL,NULL,'2026-02-20',NULL),
+ (1,'diagnostic','2025-11-10',NULL,NULL,'positif',NULL,NULL,'Dr Vétérinaire'),
+ (1,'mise_bas',  '2026-02-20',NULL,NULL,NULL,2,NULL,NULL),
+ (1,'saillie',   '2026-09-15',3,NULL,NULL,NULL,'2027-02-12',NULL),
+ (2,'mise_bas',  '2026-03-10',NULL,NULL,NULL,1,NULL,NULL),
+ (2,'saillie',   '2026-06-20',3,NULL,NULL,NULL,'2026-11-17',NULL),
+ (2,'diagnostic','2026-08-01',NULL,NULL,'positif',NULL,NULL,'Dr Vétérinaire');
 
 INSERT INTO sante (animal_id, date_intervention, type, diagnostic, produit, dose, voie, veterinaire, delai_attente_lait, delai_attente_viande, cout, date_rappel) VALUES
- (1,'2026-05-05','vaccination','Prévention fièvre aphteuse','Vaccin FA','2 mL','SC','Dr Vétérinaire',0,0,25,'2026-11-05'),
- (2,'2026-10-25','traitement','Mammite clinique quartier AG','Antibiotique intramammaire','1 seringue/j x3','Intramammaire','Dr Vétérinaire',7,4,60,NULL),
- (4,'2026-09-01','vermifuge','Déparasitage','Ivermectine','4 mL','SC',NULL,0,28,12,'2027-03-01');
+ (1,'2026-05-05','vaccination','Prévention entérotoxémie','Vaccin entérotoxémie','2 mL','SC','Dr Vétérinaire',0,0,8,'2026-11-05'),
+ (2,'2026-10-28','traitement','Mammite clinique demi-mamelle gauche','Antibiotique intramammaire','1 seringue/j x3','Intramammaire','Dr Vétérinaire',7,4,35,NULL),
+ (3,'2026-10-20','vermifuge','Déparasitage','Éprinomectine','1 mL/10 kg','Pour-on',NULL,0,14,6,'2027-04-20'),
+ (4,'2026-09-01','vermifuge','Déparasitage','Ivermectine','1 mL','SC',NULL,0,28,3,'2027-03-01'),
+ (5,'2026-09-01','vermifuge','Déparasitage','Ivermectine','1 mL','SC',NULL,0,28,3,'2027-03-01');
 
 INSERT INTO mouvements (animal_id, date_mouvement, type, lot_origine, lot_destination, motif, montant) VALUES
- (2,'2023-09-15','entree',NULL,1,'Achat élevage voisin',4200),
- (3,'2021-01-20','entree',NULL,4,'Achat reproducteur',6500),
- (4,'2026-05-15','transfert',1,2,'Sevrage',NULL);
+ (2,'2023-10-01','entree',NULL,1,'Achat élevage voisin',250),
+ (3,'2022-09-15','entree',NULL,3,'Achat reproducteur',400),
+ (4,'2026-02-21','transfert',1,2,'Mise en nurserie',NULL),
+ (5,'2026-02-21','transfert',1,2,'Mise en nurserie',NULL);
 
 -- Comptes de démonstration (à modifier en production !)
 --   admin@troupeau.local   / admin123
