@@ -117,7 +117,7 @@ require 'includes/header.php';
         <div class="col-md-4"><label class="form-label">Race</label><select name="race_id" id="race" class="form-select"><option value="">—</option>
           <?php foreach (races($pdo) as $x): ?><option value="<?= $x['id'] ?>" data-espece="<?= $x['espece_id'] ?>" <?= $sel($a['race_id'] ?? '',$x['id']) ?>><?= e($x['nom']) ?></option><?php endforeach; ?></select></div>
         <div class="col-md-4"><label class="form-label">Catégorie</label><input name="categorie" class="form-control" list="cats" value="<?= e($a['categorie'] ?? '') ?>">
-          <datalist id="cats"><?php foreach (['veau','velle','génisse','vache','taurillon','taureau','agneau','agnelle','brebis','bélier','chevreau','chèvre','bouc'] as $c) echo "<option value=\"$c\">"; ?></datalist></div>
+          <datalist id="cats"><?php foreach (['agneau','agnelle','brebis','bélier','chevreau','chèvre','bouc'] as $c) echo "<option value=\"$c\">"; ?></datalist></div>
         <div class="col-md-4"><label class="form-label">Robe</label><input name="robe" class="form-control" value="<?= e($a['robe'] ?? '') ?>"></div>
         <div class="col-md-4"><label class="form-label">Date de naissance</label><input type="date" name="date_naissance" class="form-control" value="<?= e($a['date_naissance'] ?? '') ?>"></div>
         <div class="col-md-4"><label class="form-label">Poids de naissance (kg)</label><input type="number" step="0.1" min="0" name="poids_naissance" class="form-control" value="<?= e($a['poids_naissance'] ?? '') ?>"></div>

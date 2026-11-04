@@ -1,6 +1,6 @@
 # GesTroupeau – Gestion et suivi des troupeaux
 
-Application PHP 8 / MySQL / Bootstrap 5 pour bovins, ovins et caprins.
+Application PHP 8 / MySQL / Bootstrap 5 pour ovins et caprins.
 
 ## Installation (XAMPP, WAMP, Laragon…)
 1. Copier le dossier `troupeau/` dans `htdocs/` (ou `www/`).

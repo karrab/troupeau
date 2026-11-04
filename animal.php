@@ -276,7 +276,7 @@ $del = function (string $type, int $rid) use ($id) {
             <div class="col-6"><label class="form-label small">Date</label><input type="date" name="date_evenement" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" required></div>
             <div class="col-6 r r-saillie"><label class="form-label small">Mâle</label><select name="male_id" class="form-select form-select-sm"><option value="">—</option>
               <?php foreach ($males as $m): ?><option value="<?= $m['id'] ?>"><?= e($m['numero_identification'].' '.$m['nom']) ?></option><?php endforeach; ?></select></div>
-            <div class="col-6 r r-insemination"><label class="form-label small">Semence / taureau</label><input name="semence" class="form-control form-control-sm"></div>
+            <div class="col-6 r r-insemination"><label class="form-label small">Semence / reproducteur</label><input name="semence" class="form-control form-control-sm"></div>
             <div class="col-6 r r-diagnostic"><label class="form-label small">Résultat</label><select name="resultat" class="form-select form-select-sm"><option value="">—</option><option value="positif">Positif</option><option value="negatif">Négatif</option></select></div>
             <div class="col-6 r r-mise_bas"><label class="form-label small">Nombre de petits</label><input type="number" min="0" max="10" name="nb_petits" class="form-control form-control-sm" value="1"></div>
             <div class="col-6"><label class="form-label small">Intervenant</label><input name="intervenant" class="form-control form-control-sm"></div>

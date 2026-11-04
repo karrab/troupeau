@@ -78,7 +78,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         <div>
           <h1 class="display-5 fw-bold mb-3">Suivez votre troupeau,<br>simplement.</h1>
-          <p class="lead mb-4" style="color:rgba(255,255,255,.8)">Bovins, ovins et caprins : identité, pesées, contrôle laitier, reproduction et santé réunis au même endroit.</p>
+          <p class="lead mb-4" style="color:rgba(255,255,255,.8)">Ovins et caprins : identité, pesées, contrôle laitier, reproduction et santé réunis au même endroit.</p>
           <ul class="list-unstyled login-features">
             <li><i class="bi bi-graph-up-arrow"></i> GMQ et courbes de croissance automatiques</li>
             <li><i class="bi bi-droplet-half"></i> Production laitière, TB/TP et alertes cellules</li>

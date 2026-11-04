@@ -16,7 +16,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 CREATE TABLE especes (
   id              INT AUTO_INCREMENT PRIMARY KEY,
   nom             VARCHAR(50) NOT NULL UNIQUE,
-  gestation_jours SMALLINT NOT NULL DEFAULT 283 COMMENT 'Durée moyenne de gestation, sert au calcul de la mise bas prévue'
+  gestation_jours SMALLINT NOT NULL DEFAULT 150 COMMENT 'Durée moyenne de gestation, sert au calcul de la mise bas prévue'
 ) ENGINE=InnoDB;
 
 CREATE TABLE races (
@@ -44,7 +44,7 @@ CREATE TABLE animaux (
   espece_id             INT NOT NULL,
   race_id               INT NULL,
   sexe                  ENUM('M','F') NOT NULL,
-  categorie             VARCHAR(30) NULL COMMENT 'veau, génisse, vache, taureau, agneau, brebis…',
+  categorie             VARCHAR(30) NULL COMMENT 'agneau, agnelle, brebis, bélier, chevreau, chèvre, bouc',
   robe                  VARCHAR(60) NULL,
   date_naissance        DATE NULL,
   poids_naissance       DECIMAL(6,2) NULL,
@@ -111,7 +111,7 @@ CREATE TABLE reproductions (
   type_evenement       ENUM('chaleur','saillie','insemination','diagnostic','mise_bas','avortement','tarissement') NOT NULL,
   date_evenement       DATE NOT NULL,
   male_id              INT NULL COMMENT 'Mâle du troupeau (saillie)',
-  semence              VARCHAR(100) NULL COMMENT 'Taureau / référence paillette (IA)',
+  semence              VARCHAR(100) NULL COMMENT 'Bouc ou bélier / référence paillette (IA)',
   resultat             ENUM('positif','negatif') NULL COMMENT 'Pour les diagnostics',
   nb_petits            TINYINT NULL,
   date_mise_bas_prevue DATE NULL,
