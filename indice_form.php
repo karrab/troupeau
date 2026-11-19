@@ -1,5 +1,6 @@
 <?php
 require 'includes/functions.php';
+exiger_role('admin');
 
 $id = (int)($_GET['id'] ?? $_POST['id'] ?? 0);
 $i = ['id' => 0, 'code' => '', 'nom' => '', 'famille' => $_GET['famille'] ?? 'reproduction', 'description' => '', 'formule' => '', 'unite' => '', 'decimales' => 1,

@@ -10,6 +10,7 @@ $op       = $_POST['op'] ?? '';
 $tables   = ['pesee' => ['pesees', 'poids'], 'lait' => ['controles_laitiers', 'lait'], 'repro' => ['reproductions', 'repro'],
              'sante' => ['sante', 'sante'], 'mvt' => ['mouvements', 'mvt'], 'alim' => ['alimentation', 'alim']];
 if (!isset($tables[$type])) redirect('index.php');
+if (!peut_saisir($type)) { flash('Votre rôle ne permet pas cette saisie.', 'danger'); redirect('animal.php?id=' . (int)($_POST['animal_id'] ?? 0)); }
 [$table, $tab] = $tables[$type];
 $retour = "animal.php?id=$animalId&tab=$tab";
 

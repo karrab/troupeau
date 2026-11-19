@@ -108,8 +108,9 @@ require 'includes/header.php';
 $active = fn($t) => $tab === $t ? 'active' : '';
 $show   = fn($t) => $tab === $t ? 'show active' : '';
 $del = function (string $type, int $rid) use ($id) {
+    if (!peut_saisir($type)) return '';
     return '<form method="post" action="actions.php" class="d-inline" onsubmit="return confirm(\'Supprimer cette ligne ?\')">' . csrf_field()
-      . '<input type="hidden" name="op" value="del"><input type="hidden" name="type" value="' . $type . '"><input type="hidden" name="animal_id" value="' . $id . '">'
+      . '<input type="hidden" name="op" value="del"><input type="hidden" name="type" value="' . $type . '"><input type="hidden" name="saisie" value="' . $type . '"><input type="hidden" name="animal_id" value="' . $id . '">'
       . '<input type="hidden" name="id" value="' . $rid . '"><button class="btn btn-sm btn-link text-danger p-0" title="Supprimer"><i class="bi bi-trash"></i></button></form>';
 };
 ?>
@@ -130,7 +131,7 @@ $del = function (string $type, int $rid) use ($id) {
       <div class="text-muted"><?= e($a['espece']) ?> · <?= e($a['race'] ?? 'race non renseignée') ?> · <?= $a['sexe']==='F'?'Femelle':'Mâle' ?> · <?= e($a['categorie']) ?> · <?= age($a['date_naissance']) ?> · <?= e($a['lot'] ?? 'sans lot') ?></div>
     </div>
     <div class="col-12 col-md-auto no-print">
-      <a href="animal_form.php?id=<?= $id ?>" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i> Modifier</a>
+      <?php if (peut_saisir()): ?><a href="animal_form.php?id=<?= $id ?>" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i> Modifier</a><?php endif; ?>
       <button onclick="window.print()" class="btn btn-outline-secondary btn-sm"><i class="bi bi-printer"></i> Imprimer</button>
     </div>
   </div>
@@ -330,7 +331,7 @@ $del = function (string $type, int $rid) use ($id) {
       </table></div></div>
       <div class="col-lg-4">
         <form method="post" action="actions.php" class="border rounded p-3 bg-light">
-          <?= csrf_field() ?><input type="hidden" name="op" value="add"><input type="hidden" name="type" value="sante"><input type="hidden" name="animal_id" value="<?= $id ?>">
+          <?= csrf_field() ?><input type="hidden" name="op" value="add"><input type="hidden" name="type" value="sante"><input type="hidden" name="animal_id" value="<?= $id ?>"><input type="hidden" name="saisie" value="sante">
           <h3 class="h6">Nouvelle intervention</h3>
           <div class="row g-2">
             <div class="col-6"><label class="form-label small">Date</label><input type="date" name="date_intervention" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" required></div>
@@ -412,7 +413,7 @@ $del = function (string $type, int $rid) use ($id) {
   <div class="tab-pane fade <?= $show('indices') ?>" id="indices">
     <div class="d-flex justify-content-between align-items-center mb-2">
       <h3 class="h6 mb-0">Indices par campagne</h3>
-      <a href="parametres.php#indices" class="small no-print"><i class="bi bi-sliders"></i> Formules et seuils</a>
+      <?php if (a_role('admin')): ?><a href="parametres.php#indices" class="small no-print"><i class="bi bi-sliders"></i> Formules et seuils</a><?php endif; ?>
     </div>
     <?php if ($indCamp): ?>
     <div class="table-responsive"><table class="table table-sm align-middle">

@@ -1,5 +1,6 @@
 <?php
 require 'includes/functions.php';
+exiger_role('admin');
 $titre = 'Paramètres';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {

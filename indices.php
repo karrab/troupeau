@@ -15,6 +15,7 @@ $url = fn(array $p = []) => 'indices.php?' . http_build_query(array_filter(array
 
 // ---------- Calcul / recalcul ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    exiger_role('admin', 'eleveur');
     check_csrf();
     try {
         $t = microtime(true);
@@ -109,12 +110,12 @@ require 'includes/header.php';
   <div><h1 class="h3 mb-0">Indices de productivité</h1>
     <div class="small text-muted">Calculés automatiquement à partir des événements enregistrés · dernier calcul <?= $calcule ? date('d/m/Y H:i', strtotime($calcule)) : '—' ?></div></div>
   <div class="d-flex flex-wrap gap-2 no-print">
-    <a href="parametres.php#indices" class="btn btn-outline-secondary btn-sm"><i class="bi bi-sliders"></i> Formules et seuils</a>
+    <?php if (a_role('admin')): ?><a href="parametres.php#indices" class="btn btn-outline-secondary btn-sm"><i class="bi bi-sliders"></i> Formules et seuils</a><?php endif; ?>
     <a href="<?= e($url(['export' => 'csv'])) ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-filetype-csv"></i> Export CSV</a>
-    <form method="post" class="d-inline"><?= csrf_field() ?><input type="hidden" name="campagne" value="<?= $campagne ?>">
+    <?php if (peut_saisir()): ?><form method="post" class="d-inline"><?= csrf_field() ?><input type="hidden" name="campagne" value="<?= $campagne ?>">
       <button class="btn btn-primary btn-sm"><i class="bi bi-calculator"></i> Calculer <?= e(libelle_campagne($campagne)) ?></button></form>
     <form method="post" class="d-inline"><?= csrf_field() ?><input type="hidden" name="portee" value="toutes">
-      <button class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat"></i> Tout recalculer</button></form>
+      <button class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat"></i> Tout recalculer</button></form><?php endif; ?>
   </div>
 </div>
 <?php if ($perimes): ?><div class="alert alert-warning py-2 small"><i class="bi bi-exclamation-triangle"></i> Formule modifiée depuis le dernier calcul :

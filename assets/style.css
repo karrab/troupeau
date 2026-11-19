@@ -18,3 +18,8 @@ body { background: #f4f6f3; }
   body { background: #fff; }
   .card { box-shadow: none; border: 1px solid #ddd; }
 }
+/* Rôle vétérinaire : consultation, seuls les actes de santé sont saisissables */
+.role-veterinaire form[action="actions.php"]:not(:has(input[name="saisie"][value="sante"])) { display: none !important; }
+.page-connexion { background: linear-gradient(160deg, #1f5130 0%, #2e7d4f 45%, #f4f6f3 45%); }
+.logo-connexion { display: inline-flex; width: 56px; height: 56px; border-radius: 50%; align-items: center; justify-content: center;
+                  background: #1f5130; color: #fff; font-size: 1.8rem; }

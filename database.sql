@@ -168,15 +168,21 @@ CREATE TABLE mouvements (
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
--- Utilisateurs (pour l'authentification – évolution prévue)
+-- Utilisateurs : aucun compte n'est fourni ; le premier compte
+-- administrateur est créé sur la page de connexion au premier accès.
 -- ---------------------------------------------------------------------
 CREATE TABLE utilisateurs (
-  id           INT AUTO_INCREMENT PRIMARY KEY,
-  nom          VARCHAR(100) NOT NULL,
-  email        VARCHAR(150) NOT NULL UNIQUE,
-  mot_de_passe VARCHAR(255) NOT NULL COMMENT 'password_hash()',
-  role         ENUM('admin','eleveur','veterinaire') NOT NULL DEFAULT 'eleveur',
-  created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  id                 INT AUTO_INCREMENT PRIMARY KEY,
+  nom                VARCHAR(100) NOT NULL,
+  email              VARCHAR(150) NOT NULL UNIQUE COMMENT 'Identifiant de connexion',
+  mot_de_passe       VARCHAR(255) NOT NULL COMMENT 'password_hash()',
+  role               ENUM('admin','eleveur','veterinaire') NOT NULL DEFAULT 'eleveur',
+  actif              TINYINT(1) NOT NULL DEFAULT 1,
+  doit_changer_mdp   TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Mot de passe provisoire à changer',
+  echecs             TINYINT NOT NULL DEFAULT 0 COMMENT 'Essais de connexion échoués consécutifs',
+  bloque_jusqua      DATETIME NULL,
+  derniere_connexion DATETIME NULL,
+  created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------

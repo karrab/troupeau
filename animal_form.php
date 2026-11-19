@@ -1,5 +1,6 @@
 <?php
 require 'includes/functions.php';
+exiger_role('admin', 'eleveur');
 
 $id = (int)($_GET['id'] ?? 0);
 $a  = ['espece_id' => 1, 'sexe' => 'F', 'origine' => 'naissance', 'statut' => 'actif', 'date_entree' => date('Y-m-d')];

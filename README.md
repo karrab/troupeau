@@ -7,7 +7,11 @@ Application PHP 8 / MySQL / Bootstrap 5 pour bovins, ovins et caprins.
 2. Importer `database.sql` dans phpMyAdmin (crée la base `troupeau` + données de démonstration).
 3. Adapter `config/db.php` (hôte, utilisateur, mot de passe).
 4. Vérifier que le dossier `uploads/` est accessible en écriture (photos).
-5. Ouvrir `http://localhost/troupeau/`.
+5. Ouvrir `http://localhost/troupeau/` : à la première visite, la page de connexion propose de **créer le compte administrateur**
+   (aucun mot de passe n'est fourni par défaut).
+
+Base déjà installée : sélectionner la base dans phpMyAdmin, puis importer dans l'ordre `migrations/001_indices.sql`
+et `migrations/002_utilisateurs.sql` (chacune peut être réimportée sans risque).
 
 ## Modules
 | Page | Rôle |
@@ -20,6 +24,9 @@ Application PHP 8 / MySQL / Bootstrap 5 pour bovins, ovins et caprins.
 | `pesees.php` | Séance de pesée groupée par lot |
 | `indices.php` | **Indices de productivité** par famille (R, L, C, S, P), par campagne / lactation / contrôle et par animal, lot, espèce, troupeau ; évolution, export CSV |
 | `indice_form.php` | Création / modification d'un indice : formule, période, seuils d'interprétation par espèce, test de la formule |
+| `login.php` / `logout.php` | Connexion (création du compte administrateur au premier accès) et déconnexion |
+| `mon_compte.php` | Profil et changement de mot de passe |
+| `utilisateurs.php` | Administrateur : comptes, rôles, activation, réinitialisation de mot de passe |
 | `parametres.php` | Espèces (durée de gestation), races, lots, **liste des indices et de leurs formules** |
 | `actions.php` | Enregistrement / suppression de l'historique |
 
@@ -71,6 +78,24 @@ Données ajoutées pour ces indices : date et poids de **sevrage** (fiche animal
 les espèces sont reconnues par leur nom – Bovin/Vache, Ovin/Mouton/Brebis, Caprin/Chèvre – quels que soient leurs identifiants ;
 les résultats sont recalculés au premier affichage de la page Indices).
 
+## Connexion et rôles
+Toutes les pages exigent une connexion. Identifiant = adresse e-mail.
+
+| Rôle | Droits |
+|---|---|
+| Administrateur | Tout, y compris Paramètres, formules des indices et gestion des utilisateurs |
+| Éleveur | Création et modification des animaux, toutes les saisies (pesées, lait, reproduction, santé, alimentation, mouvements) |
+| Vétérinaire | Consultation de tout le troupeau et des indices ; saisie et suppression des actes de **santé** uniquement |
+
+- Les droits sont vérifiés côté serveur (pages et `actions.php`), pas seulement masqués à l'écran.
+- Nouveau compte ou mot de passe réinitialisé : un **mot de passe provisoire** est affiché une seule fois à l'administrateur,
+  et l'utilisateur doit en choisir un nouveau à sa connexion suivante.
+- Mot de passe : 8 caractères minimum, avec au moins une lettre et un chiffre ; stocké avec `password_hash()`.
+- 5 essais erronés bloquent le compte 15 minutes ; la session expire après 2 heures d'inactivité.
+- Il reste toujours au moins un administrateur actif (impossible de se désactiver soi-même ou de rétrograder le dernier admin).
+- **Mot de passe administrateur perdu** : en ligne de commande sur le serveur,
+  `php outils/reinitialiser_mot_de_passe.php adresse@exemple.fr` (dossier inaccessible depuis le navigateur).
+
 ## Sécurité
 Requêtes préparées PDO, échappement HTML, formules évaluées par un analyseur dédié (jamais `eval`), jeton CSRF sur tous les formulaires, contrôle du type des photos.
-La table `utilisateurs` est prête pour ajouter une connexion avec `password_hash()`.
+Cookies de session `HttpOnly` / `SameSite=Lax`, identifiant de session régénéré à la connexion.
