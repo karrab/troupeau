@@ -18,8 +18,8 @@ Application PHP 8 / MySQL / Bootstrap 5 pour bovins, ovins et caprins.
 | `animal_form.php` | Création / modification / photo / sortie (vente, mort, réforme) |
 | `lait.php` | Synthèse mensuelle et classement des laitières |
 | `pesees.php` | Séance de pesée groupée par lot |
-| `indices.php` | **Indices** : résultats enregistrés par année et par animal / lot / espèce / troupeau, interprétation, évolution pluriannuelle, export CSV |
-| `indice_form.php` | Création / modification d'un indice : formule, seuils d'interprétation, champ d'application, test de la formule |
+| `indices.php` | **Indices de productivité** par famille (R, L, C, S, P), par campagne / lactation / contrôle et par animal, lot, espèce, troupeau ; évolution, export CSV |
+| `indice_form.php` | Création / modification d'un indice : formule, période, seuils d'interprétation par espèce, test de la formule |
 | `parametres.php` | Espèces (durée de gestation), races, lots, **liste des indices et de leurs formules** |
 | `actions.php` | Enregistrement / suppression de l'historique |
 
@@ -32,22 +32,43 @@ Application PHP 8 / MySQL / Bootstrap 5 pour bovins, ovins et caprins.
 - **Alerte cellules** au-delà de 300 000/mL (`SEUIL_CELLULES` dans `includes/functions.php`).
 - Mouvements d'entrée, de transfert et de sortie tracés automatiquement.
 
-## Indices paramétrables
-Chaque indice est défini dans **Paramètres › Indices** et peut être modifié sans toucher au code :
-- **Formule** construite à partir de variables de base calculées pour chaque animal et chaque année
-  (`lait_moyen`, `lait_cumul`, `tb_moyen`, `gmq`, `ivv`, `nb_diag_pos`, `nb_petits`, `cout_sante`, `age_mois`, `mort`…,
-  liste complète dans le formulaire). Opérateurs `+ - * / % ^`, comparaisons, `et / ou / non`,
-  fonctions `min max abs arrondi racine log si sinon`. Exemple : `lait_cumul * (tb_moyen + tp_moyen) / 1000`.
-- **Interprétation** : seuils (min inclus, max exclu) avec libellé et couleur, ex. `< 200` Mamelle saine, `200 – 300` À surveiller, `≥ 300` Mammite.
-- **Champ d'application** : espèce, sexe, niveaux enregistrés (animal, lot, espèce, troupeau) et mode de calcul des groupes
-  (moyenne, somme, min, max, ou *ratio* : formule appliquée aux totaux du groupe pour les taux).
-- **Tester la formule** affiche le résultat animal par animal avant d'enregistrer ; l'enregistrement recalcule l'indice sur toutes les années.
+## Indices de productivité
+Les 25 indices de la spécification sont **calculés automatiquement** à partir des événements enregistrés (jamais saisis),
+**interprétés** et **enregistrés** dans `indices_resultats` (consultables aussi via la vue SQL `v_indices_resultats`).
 
-Les résultats (valeur, interprétation, formule utilisée, date de calcul) sont stockés dans `indices_resultats`.
-Ils sont recalculés automatiquement après chaque saisie (pesée, contrôle laitier, reproduction, santé, mouvement, fiche animal)
-pour l'année concernée, ou à la demande depuis la page **Indices**. Une icône ⚠ signale un indice dont la formule a changé depuis le dernier calcul.
+| Famille | Codes |
+|---|---|
+| R · Reproduction et fertilité | R01 fertilité, R02 fécondité, R03 mise-bas, R04 prolificité, R05 indice de saillie, R06 retour en chaleur, R07 avortement, R08 gémellité, R09 âge à la 1re mise-bas, R10 IMB |
+| L · Production laitière | L01 production journalière, L02 production totale par lactation, L03 durée de lactation, L04 production moyenne/jour, L05 persistance |
+| C · Croissance et alimentation | C01 GMQ, C02 poids au sevrage ajusté 90 j, C03 indice de consommation, C04 valorisation des parcours |
+| S · Survie et santé | S01 mortalité des chevreaux, S02 taux de sevrage, S03 taux de réforme |
+| P · Productivité globale | P01 productivité numérique, P02 productivité pondérale, P03 score global 0–100 |
 
-**Base existante** : importer `migrations/001_indices.sql` (crée les 3 tables et 11 indices par défaut sans toucher aux données).
+**Période de calcul** (granularité) : *campagne* (une valeur par animal et par campagne, début de campagne réglable dans Paramètres,
+septembre par défaut), *lactation* (mise bas → tarissement) ou *jour* (chaque contrôle laitier).
+**Niveaux enregistrés** : animal (ou mâle pour R05), lot (historique des mouvements), espèce, troupeau.
+
+**Paramètres › Indices** permet de modifier chaque indice sans toucher au code :
+- **formule** à partir de variables de base (`gestante`, `saillie_diag`, `nb_petits`, `lait_lactation`, `jours_parcours`, `petits_sevres`…)
+  et des **codes d'autres indices** de même période (`L04 = L02 / sinon(L03, jours_en_lait)`, P03 utilise R04 et S02) ; les dépendances circulaires sont refusées ;
+- fonctions `si`, `sinon`, `min`, `max`, `moyenne`, `moyenne_ponderee`, `note(x, valeur_0, valeur_100)`, `arrondi`… ;
+- **interprétation** : sens favorable, texte, seuils colorés **généraux ou par espèce** (prioritaires) ;
+- **calcul des groupes** : *ratio* (Σ numérateurs ÷ Σ dénominateurs, pour les taux) ou moyenne / somme / min / max ;
+- **Tester la formule** sur une campagne avant d'enregistrer ; l'enregistrement recalcule tout.
+
+Recalcul automatique après chaque saisie (campagne concernée et précédente, car une mise bas confirme les saillies de la campagne d'avant).
+
+Règles de calcul à connaître :
+- une saillie n'entre dans R01 qu'une fois son résultat connu (diagnostic, échec ou 60 jours écoulés), et dans R02/R03 qu'une fois arrivée à terme ;
+- R09 ne concerne que les animaux nés à la ferme ; C01 les animaux de moins de 24 mois ; P03 les femelles ayant mis bas dans la campagne ;
+- les mort-nés sont saisis avec la mise bas ; le poids au sevrage est celui de la fiche, sinon la pesée la plus proche (± 15 j) ;
+- les quantités de lait sont traitées comme des kg (1 L ≈ 1,03 kg).
+
+Données ajoutées pour ces indices : date et poids de **sevrage** (fiche animal), **mort-nés** (mise bas), onglet **Alimentation**
+(aliment distribué), lots de type *pâturage* pour les jours de parcours.
+
+**Base existante** : importer `migrations/001_indices.sql` (ajoute les colonnes et tables, remplace les définitions d'indices ;
+les résultats sont recalculés au premier affichage de la page Indices).
 
 ## Sécurité
 Requêtes préparées PDO, échappement HTML, formules évaluées par un analyseur dédié (jamais `eval`), jeton CSRF sur tous les formulaires, contrôle du type des photos.

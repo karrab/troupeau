@@ -8,7 +8,7 @@ $animalId = (int)($_POST['animal_id'] ?? 0);
 $type     = $_POST['type'] ?? '';
 $op       = $_POST['op'] ?? '';
 $tables   = ['pesee' => ['pesees', 'poids'], 'lait' => ['controles_laitiers', 'lait'], 'repro' => ['reproductions', 'repro'],
-             'sante' => ['sante', 'sante'], 'mvt' => ['mouvements', 'mvt']];
+             'sante' => ['sante', 'sante'], 'mvt' => ['mouvements', 'mvt'], 'alim' => ['alimentation', 'alim']];
 if (!isset($tables[$type])) redirect('index.php');
 [$table, $tab] = $tables[$type];
 $retour = "animal.php?id=$animalId&tab=$tab";
@@ -18,7 +18,7 @@ $st->execute([$animalId]);
 $animal = $st->fetch() ?: redirect('animaux.php');
 
 // ---------- Suppression ----------
-$colDate = ['pesee' => 'date_pesee', 'lait' => 'date_controle', 'repro' => 'date_evenement', 'sante' => 'date_intervention', 'mvt' => 'date_mouvement'][$type];
+$colDate = ['pesee' => 'date_pesee', 'lait' => 'date_controle', 'repro' => 'date_evenement', 'sante' => 'date_intervention', 'mvt' => 'date_mouvement', 'alim' => 'date_distribution'][$type];
 if ($op === 'del') {
     $d = $pdo->prepare("SELECT $colDate FROM $table WHERE id=? AND animal_id=?");
     $d->execute([(int)$_POST['id'], $animalId]);
@@ -54,12 +54,14 @@ try {
             $date = post('date_evenement');
             $prevue = in_array($t, ['saillie','insemination'], true)
                 ? date('Y-m-d', strtotime("$date +{$animal['gestation_jours']} days")) : null;
-            $pdo->prepare('INSERT INTO reproductions (animal_id,type_evenement,date_evenement,male_id,semence,resultat,nb_petits,date_mise_bas_prevue,intervenant,observations) VALUES (?,?,?,?,?,?,?,?,?,?)')
+            if ($t === 'mise_bas' && (int)post('nb_morts_nes') > (int)post('nb_petits')) throw new InvalidArgumentException('Le nombre de mort-nés dépasse le nombre de petits.');
+            $pdo->prepare('INSERT INTO reproductions (animal_id,type_evenement,date_evenement,male_id,semence,resultat,nb_petits,nb_morts_nes,date_mise_bas_prevue,intervenant,observations) VALUES (?,?,?,?,?,?,?,?,?,?,?)')
                 ->execute([$animalId, $t, $date,
                     $t === 'saillie' ? post('male_id') : null,
                     $t === 'insemination' ? post('semence') : null,
                     $t === 'diagnostic' ? post('resultat') : null,
                     $t === 'mise_bas' ? post('nb_petits') : null,
+                    $t === 'mise_bas' ? (int)post('nb_morts_nes') : null,
                     $prevue, post('intervenant'), post('observations')]);
             flash(TYPES_REPRO[$t] . ' enregistrée.' . ($prevue ? ' Mise bas prévue le ' . dfr($prevue) . '.' : ''));
             if ($t === 'mise_bas') { maj_indices_auto($pdo, $date); flash('Mise bas enregistrée. Créez maintenant la fiche du petit.'); redirect("animal_form.php?mere=$animalId"); }
@@ -72,6 +74,13 @@ try {
                 ->execute([$animalId, post('date_intervention'), $t, post('diagnostic'), post('produit'), post('dose'), post('voie'), post('veterinaire'),
                     (int)post('delai_attente_lait'), (int)post('delai_attente_viande'), post('cout'), post('date_rappel')]);
             flash('Intervention enregistrée.');
+            break;
+
+        case 'alim':
+            if (!post('date_distribution') || !post('aliment') || (float)post('quantite_kg') <= 0) throw new InvalidArgumentException('Date, aliment et quantité obligatoires.');
+            $pdo->prepare('INSERT INTO alimentation (animal_id,date_distribution,aliment,quantite_kg,cout,observations) VALUES (?,?,?,?,?,?)')
+                ->execute([$animalId, post('date_distribution'), post('aliment'), post('quantite_kg'), post('cout'), post('observations')]);
+            flash('Distribution enregistrée.');
             break;
 
         case 'mvt':

@@ -45,6 +45,14 @@ $cellules = $pdo->query("SELECT c.*, a.numero_identification, a.nom FROM control
 $evol = $pdo->query("SELECT DATE_FORMAT(date_controle,'%Y-%m') m, ROUND(AVG(quantite_totale),1) moy, COUNT(*) nb
     FROM controles_laitiers WHERE date_controle >= CURDATE() - INTERVAL 12 MONTH GROUP BY m ORDER BY m")->fetchAll();
 
+// Indices clés du troupeau (dernière campagne terminée)
+$campIdx = campagne_de(date('Y-m-d')) - 1;
+$st = $pdo->prepare("SELECT i.*, r.valeur, r.interpretation, r.couleur FROM indices i
+    LEFT JOIN indices_resultats r ON r.indice_id=i.id AND r.niveau='troupeau' AND r.campagne=? AND r.periode<>'jour'
+    WHERE i.actif=1 AND i.code IN ('R01','R04','L02','S02','P01','P02') ORDER BY i.ordre");
+$st->execute([$campIdx]);
+$indicesCles = $st->fetchAll();
+
 require 'includes/header.php';
 ?>
 <h1 class="h3 mb-4">Tableau de bord</h1>
@@ -62,6 +70,24 @@ require 'includes/header.php';
     <div class="val text-danger"><?= count($rappels) + count($misesBas) + count($attente) + count($cellules) ?></div>
     <div class="small text-muted">santé, reproduction, qualité du lait</div></div></div>
 </div>
+
+<?php if ($indicesCles): ?>
+<div class="card p-3 mb-4">
+  <div class="d-flex justify-content-between align-items-center mb-2">
+    <h2 class="h6 mb-0"><i class="bi bi-calculator"></i> Indices du troupeau · campagne <?= e(libelle_campagne($campIdx)) ?></h2>
+    <a href="indices.php?niveau=troupeau" class="small">Tous les indices →</a>
+  </div>
+  <div class="row g-3 text-center">
+    <?php foreach ($indicesCles as $x): ?>
+    <div class="col-6 col-md-4 col-xl-2 kpi" title="<?= e($x['description']) ?>">
+      <div class="lbl"><?= e($x['code']) ?> · <?= e($x['nom']) ?></div>
+      <div class="val fs-4"><?= $x['valeur'] !== null ? nfr($x['valeur'], (int)$x['decimales']) : '—' ?> <small class="fs-6 text-muted"><?= e($x['unite']) ?></small></div>
+      <?php if ($x['interpretation']): ?><span class="badge text-bg-<?= e($x['couleur']) ?>"><?= e($x['interpretation']) ?></span><?php endif; ?>
+    </div>
+    <?php endforeach; ?>
+  </div>
+</div>
+<?php endif; ?>
 
 <div class="row g-3">
   <div class="col-lg-7">

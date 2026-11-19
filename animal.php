@@ -87,13 +87,22 @@ foreach ($soins as $so) {
     if ($so['delai_attente_viande'] && $fv >= date('Y-m-d') && $fv > (string)$attenteViande) $attenteViande = $fv;
 }
 
-// ---------- Indices enregistrés pour cet animal ----------
-$st = $pdo->prepare("SELECT r.*, i.nom, i.unite, i.decimales, i.description, i.formule formule_actuelle, i.ordre FROM indices_resultats r
-    JOIN indices i ON i.id=r.indice_id WHERE r.niveau='animal' AND r.cible_id=? AND i.actif=1 ORDER BY i.ordre, i.nom, r.annee");
+$alims = lignes($pdo, 'SELECT * FROM alimentation WHERE animal_id=? ORDER BY date_distribution DESC, id DESC', $id);
+
+// ---------- Indices enregistrés pour cet animal (par campagne, par lactation) ----------
+$st = $pdo->prepare("SELECT r.*, i.code, i.nom, i.famille, i.unite, i.decimales, i.description, i.interpretation interp_texte, i.formule formule_actuelle, i.periode
+    FROM indices_resultats r JOIN indices i ON i.id=r.indice_id
+    WHERE r.niveau='animal' AND r.cible_id=? AND i.actif=1 ORDER BY i.ordre, r.periode_cle");
 $st->execute([$id]);
-$indAnimal = []; $indAnnees = [];
-foreach ($st->fetchAll() as $r) { $indAnimal[$r['indice_id']]['def'] = $r; $indAnimal[$r['indice_id']]['ans'][$r['annee']] = $r; $indAnnees[$r['annee']] = true; }
-ksort($indAnnees); $indAnnees = array_keys($indAnnees);
+$indCamp = []; $indLact = []; $campAnimal = []; $lactAnimal = []; $defs = [];
+foreach ($st->fetchAll() as $r) {
+    $defs[$r['indice_id']] = $r + ['interpretation' => $r['interp_texte'], 'formule' => $r['formule_actuelle']];
+    if ($r['periode'] === 'campagne') { $indCamp[$r['indice_id']][$r['campagne']] = $r; $campAnimal[$r['campagne']] = true; }
+    elseif ($r['periode'] === 'lactation') { $indLact[$r['periode_cle']][$r['indice_id']] = $r; $lactAnimal[$r['periode_cle']] = $r; }
+}
+krsort($campAnimal); $campAnimal = array_keys($campAnimal);
+krsort($lactAnimal);
+$colsLact = array_values(array_unique(array_merge([], ...array_values(array_map('array_keys', $indLact)))));
 
 require 'includes/header.php';
 $active = fn($t) => $tab === $t ? 'active' : '';
@@ -144,7 +153,8 @@ $del = function (string $type, int $rid) use ($id) {
   <?php endif; ?>
   <li class="nav-item"><button class="nav-link <?= $active('sante') ?>" data-bs-toggle="tab" data-bs-target="#sante"><i class="bi bi-capsule"></i> Santé <span class="badge text-bg-light"><?= count($soins) ?></span></button></li>
   <li class="nav-item"><button class="nav-link <?= $active('mvt') ?>" data-bs-toggle="tab" data-bs-target="#mvt"><i class="bi bi-arrow-left-right"></i> Mouvements</button></li>
-  <li class="nav-item"><button class="nav-link <?= $active('indices') ?>" data-bs-toggle="tab" data-bs-target="#indices"><i class="bi bi-calculator"></i> Indices <span class="badge text-bg-light"><?= count($indAnimal) ?></span></button></li>
+  <li class="nav-item"><button class="nav-link <?= $active('alim') ?>" data-bs-toggle="tab" data-bs-target="#alim"><i class="bi bi-basket"></i> Alimentation <span class="badge text-bg-light"><?= count($alims) ?></span></button></li>
+  <li class="nav-item"><button class="nav-link <?= $active('indices') ?>" data-bs-toggle="tab" data-bs-target="#indices"><i class="bi bi-calculator"></i> Indices <span class="badge text-bg-light"><?= count($indCamp) + count($colsLact) ?></span></button></li>
 </ul>
 
 <div class="tab-content card border-top-0 rounded-top-0 p-3">
@@ -162,6 +172,7 @@ $del = function (string $type, int $rid) use ($id) {
       <div class="col-md-4"><dl class="fiche">
         <dt>Naissance</dt><dd><?= dfr($a['date_naissance']) ?> (<?= age($a['date_naissance']) ?>)</dd>
         <dt>Poids de naissance</dt><dd><?= $a['poids_naissance'] ? nfr($a['poids_naissance']).' kg' : '—' ?></dd>
+        <dt>Sevrage</dt><dd><?= $a['date_sevrage'] ? dfr($a['date_sevrage']) . ($a['poids_sevrage'] ? ' – ' . nfr($a['poids_sevrage']) . ' kg' : '') . ($a['date_naissance'] ? ' (' . jours_entre($a['date_naissance'], $a['date_sevrage']) . ' j)' : '') : '—' ?></dd>
         <dt>Mère</dt><dd><?= $a['mere_id'] ? '<a href="animal.php?id='.$a['mere_id'].'">'.e($a['mere_num'].' '.$a['mere_nom']).'</a>' : '—' ?></dd>
         <dt>Père</dt><dd><?= $a['pere_id'] ? '<a href="animal.php?id='.$a['pere_id'].'">'.e($a['pere_num'].' '.$a['pere_nom']).'</a>' : '—' ?></dd>
       </dl></div>
@@ -269,7 +280,7 @@ $del = function (string $type, int $rid) use ($id) {
           <tbody><?php foreach ($repros as $r): ?>
             <tr><td><?= dfr($r['date_evenement']) ?></td><td><?= e(TYPES_REPRO[$r['type_evenement']]) ?></td>
               <td class="small"><?= e(trim(($r['male_num'] ? 'Mâle '.$r['male_num'].' ' : '') . ($r['semence'] ?? '') . ' ' .
-                  ($r['resultat'] ? ucfirst($r['resultat']) : '') . ' ' . ($r['nb_petits'] ? $r['nb_petits'].' petit(s)' : '') . ' ' . ($r['observations'] ?? ''))) ?></td>
+                  ($r['resultat'] ? ucfirst($r['resultat']) : '') . ' ' . ($r['nb_petits'] ? $r['nb_petits'].' petit(s)' . ($r['nb_morts_nes'] ? ' dont ' . $r['nb_morts_nes'] . ' mort-né(s)' : '') : '') . ' ' . ($r['observations'] ?? ''))) ?></td>
               <td><?= $r['date_mise_bas_prevue'] ? dfr($r['date_mise_bas_prevue']) : '' ?></td><td class="small"><?= e($r['intervenant']) ?></td>
               <td class="text-end no-print"><?= $del('repro', $r['id']) ?></td></tr>
           <?php endforeach; if (!$repros): ?><tr><td colspan="6" class="text-muted text-center">Aucun événement.</td></tr><?php endif; ?></tbody>
@@ -287,7 +298,8 @@ $del = function (string $type, int $rid) use ($id) {
               <?php foreach ($males as $m): ?><option value="<?= $m['id'] ?>"><?= e($m['numero_identification'].' '.$m['nom']) ?></option><?php endforeach; ?></select></div>
             <div class="col-6 r r-insemination"><label class="form-label small">Semence / taureau</label><input name="semence" class="form-control form-control-sm"></div>
             <div class="col-6 r r-diagnostic"><label class="form-label small">Résultat</label><select name="resultat" class="form-select form-select-sm"><option value="">—</option><option value="positif">Positif</option><option value="negatif">Négatif</option></select></div>
-            <div class="col-6 r r-mise_bas"><label class="form-label small">Nombre de petits</label><input type="number" min="0" max="10" name="nb_petits" class="form-control form-control-sm" value="1"></div>
+            <div class="col-6 r r-mise_bas"><label class="form-label small">Nombre de petits nés</label><input type="number" min="0" max="10" name="nb_petits" class="form-control form-control-sm" value="1"></div>
+            <div class="col-6 r r-mise_bas"><label class="form-label small">Dont mort-nés</label><input type="number" min="0" max="10" name="nb_morts_nes" class="form-control form-control-sm" value="0"></div>
             <div class="col-6"><label class="form-label small">Intervenant</label><input name="intervenant" class="form-control form-control-sm"></div>
             <div class="col-12"><input name="observations" class="form-control form-control-sm" placeholder="Observations"></div>
             <div class="col-12 small text-muted r r-saillie r-insemination">La mise bas prévue est calculée automatiquement (<?= (int)$a['gestation_jours'] ?> j de gestation).</div>
@@ -366,21 +378,65 @@ $del = function (string $type, int $rid) use ($id) {
     </div>
   </div>
 
+  <!-- ================= ALIMENTATION ================= -->
+  <div class="tab-pane fade <?= $show('alim') ?>" id="alim">
+    <div class="row g-3">
+      <div class="col-lg-8"><table class="table table-sm">
+        <thead><tr><th>Date</th><th>Aliment</th><th class="text-end">Quantité</th><th class="text-end">Coût</th><th>Observations</th><th></th></tr></thead>
+        <tbody><?php foreach ($alims as $x): ?>
+          <tr><td><?= dfr($x['date_distribution']) ?></td><td><?= e($x['aliment']) ?></td><td class="text-end"><?= nfr($x['quantite_kg']) ?> kg</td>
+            <td class="text-end"><?= $x['cout'] !== null ? nfr($x['cout'], 2) : '' ?></td><td class="small"><?= e($x['observations']) ?></td><td class="text-end no-print"><?= $del('alim', $x['id']) ?></td></tr>
+        <?php endforeach; if (!$alims): ?><tr><td colspan="6" class="text-muted text-center">Aucune distribution enregistrée.</td></tr><?php endif; ?></tbody>
+        <?php if ($alims): ?><tfoot><tr class="fw-semibold"><td colspan="2">Total</td><td class="text-end"><?= nfr(array_sum(array_column($alims, 'quantite_kg'))) ?> kg</td><td class="text-end"><?= nfr(array_sum(array_column($alims, 'cout')), 2) ?></td><td colspan="2"></td></tr></tfoot><?php endif; ?>
+      </table></div>
+      <div class="col-lg-4">
+        <form method="post" action="actions.php" class="border rounded p-3 bg-light">
+          <?= csrf_field() ?><input type="hidden" name="op" value="add"><input type="hidden" name="type" value="alim"><input type="hidden" name="animal_id" value="<?= $id ?>">
+          <h3 class="h6">Aliment distribué</h3>
+          <div class="row g-2">
+            <div class="col-6"><label class="form-label small">Date</label><input type="date" name="date_distribution" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" required></div>
+            <div class="col-6"><label class="form-label small">Quantité (kg)</label><input type="number" step="0.01" min="0.01" name="quantite_kg" class="form-control form-control-sm" required></div>
+            <div class="col-8"><input name="aliment" class="form-control form-control-sm" placeholder="Aliment (concentré, foin…)" list="aliments" required>
+              <datalist id="aliments"><?php foreach (['Concentré','Foin','Luzerne','Ensilage','Orge','Lait en poudre','Granulé démarrage'] as $x) echo '<option value="' . $x . '">'; ?></datalist></div>
+            <div class="col-4"><input type="number" step="0.01" min="0" name="cout" class="form-control form-control-sm" placeholder="Coût"></div>
+            <div class="col-12"><input name="observations" class="form-control form-control-sm" placeholder="Observations"></div>
+            <div class="col-12"><button class="btn btn-primary btn-sm w-100">Ajouter</button></div>
+          </div>
+        </form>
+        <p class="small text-muted mt-2">Sert au calcul de l'indice de consommation (aliment ÷ gain de poids).</p>
+      </div>
+    </div>
+  </div>
+
   <!-- ================= INDICES ================= -->
   <div class="tab-pane fade <?= $show('indices') ?>" id="indices">
     <div class="d-flex justify-content-between align-items-center mb-2">
-      <h3 class="h6 mb-0">Indices calculés par année</h3>
-      <a href="parametres.php#indices" class="small no-print"><i class="bi bi-sliders"></i> Modifier les formules</a>
+      <h3 class="h6 mb-0">Indices par campagne</h3>
+      <a href="parametres.php#indices" class="small no-print"><i class="bi bi-sliders"></i> Formules et seuils</a>
     </div>
-    <?php if ($indAnimal): ?>
+    <?php if ($indCamp): ?>
     <div class="table-responsive"><table class="table table-sm align-middle">
-      <thead><tr><th>Indice</th><?php foreach ($indAnnees as $y): ?><th class="text-center"><?= $y ?></th><?php endforeach; ?></tr></thead>
-      <tbody><?php foreach ($indAnimal as $x): $def = $x['def']; ?>
-        <tr><td><span class="fw-semibold"><?= e($def['nom']) ?></span><br><code class="small" title="<?= e($def['description']) ?>"><?= e($def['formule_actuelle']) ?></code></td>
-          <?php foreach ($indAnnees as $y): ?><td class="text-center"><?= cellule_indice($def, $x['ans'][$y] ?? null) ?></td><?php endforeach; ?></tr>
+      <thead><tr><th>Indice</th><?php foreach ($campAnimal as $c): ?><th class="text-center"><?= e(libelle_campagne($c)) ?></th><?php endforeach; ?></tr></thead>
+      <tbody><?php $fam = null; foreach ($indCamp as $iid => $vals): $d = $defs[$iid]; if ($d['famille'] !== $fam): $fam = $d['famille']; ?>
+        <tr class="table-light"><td colspan="<?= count($campAnimal) + 1 ?>" class="small fw-semibold"><i class="bi bi-<?= FAMILLES_INDICES[$fam][2] ?>"></i> <?= e(FAMILLES_INDICES[$fam][0]) ?></td></tr><?php endif; ?>
+        <tr><td><span class="badge text-bg-light font-monospace"><?= e($d['code']) ?></span> <span class="fw-semibold"><?= e($d['nom']) ?></span>
+          <br><small class="text-muted"><?= e($d['interp_texte']) ?></small></td>
+          <?php foreach ($campAnimal as $c): ?><td class="text-center"><?= cellule_indice($d, $vals[$c] ?? null) ?></td><?php endforeach; ?></tr>
       <?php endforeach; ?></tbody>
     </table></div>
-    <?php else: ?><p class="text-muted small">Aucun indice enregistré pour cet animal. Les indices sont recalculés automatiquement à chaque saisie, ou depuis la page <a href="indices.php">Indices</a>.</p><?php endif; ?>
+    <?php else: ?><p class="text-muted small">Aucun indice de campagne pour cet animal.</p><?php endif; ?>
+
+    <?php if ($indLact): ?>
+    <h3 class="h6 mt-3">Indices par lactation</h3>
+    <div class="table-responsive"><table class="table table-sm align-middle">
+      <thead><tr><th>Lactation</th><?php foreach ($colsLact as $iid) echo entete_indice($defs[$iid]); ?></tr></thead>
+      <tbody><?php foreach ($lactAnimal as $cle => $r0): ?>
+        <tr><td class="text-nowrap">Mise bas <?= dfr($r0['date_debut']) ?><br><small class="text-muted">→ <?= $r0['date_fin'] ? dfr($r0['date_fin']) : 'en cours' ?></small></td>
+          <?php foreach ($colsLact as $iid): ?><td class="text-center"><?= cellule_indice($defs[$iid], $indLact[$cle][$iid] ?? null) ?></td><?php endforeach; ?></tr>
+      <?php endforeach; ?></tbody>
+    </table></div>
+    <?php endif; ?>
+    <p class="small text-muted no-print">Indices recalculés automatiquement à chaque saisie. Production journalière (L01) : voir l'onglet Lait et la page <a href="indices.php?niveau=animal&amp;vue=jour">Indices</a>.</p>
   </div>
 </div>
 <?php

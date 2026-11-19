@@ -26,14 +26,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['supprimer']) && $id) {
         $pdo->prepare('DELETE FROM animaux WHERE id=?')->execute([$id]);
         if (!empty($a['photo']) && is_file(UPLOAD_DIR . $a['photo'])) unlink(UPLOAD_DIR . $a['photo']);
-        $pdo->prepare("DELETE FROM indices_resultats WHERE niveau='animal' AND cible_id=?")->execute([$id]);
-        maj_indices_auto($pdo, ...array_map(fn($y) => "$y-01-01", annees_indices($pdo)));
+        try { recalculer_indices($pdo); } catch (Throwable $e) { error_log('Indices : ' . $e->getMessage()); }
         flash('Animal supprimé avec tout son historique.', 'warning');
         redirect('animaux.php');
     }
 
     $champs = ['numero_identification','nom','espece_id','race_id','sexe','categorie','robe','date_naissance','poids_naissance',
-               'mere_id','pere_id','origine','date_entree','prix_achat','lot_id','statut','date_sortie','motif_sortie','observations'];
+               'date_sevrage','poids_sevrage','mere_id','pere_id','origine','date_entree','prix_achat','lot_id','statut','date_sortie','motif_sortie','observations'];
     $d = [];
     foreach ($champs as $c) $d[$c] = post($c);
 
@@ -42,6 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!in_array($d['sexe'], ['M','F'], true)) $erreurs[] = 'Le sexe est obligatoire.';
     if ($d['statut'] !== 'actif' && !$d['date_sortie']) $erreurs[] = 'Indiquez la date de sortie pour un animal vendu, mort ou réformé.';
     if ($id && ($d['mere_id'] == $id || $d['pere_id'] == $id)) $erreurs[] = 'Un animal ne peut pas être son propre parent.';
+    if ($d['date_sevrage'] && $d['date_naissance'] && $d['date_sevrage'] <= $d['date_naissance']) $erreurs[] = 'La date de sevrage doit être postérieure à la naissance.';
 
     $dup = $pdo->prepare('SELECT id FROM animaux WHERE numero_identification=? AND id<>?');
     $dup->execute([$d['numero_identification'], $id]);
@@ -92,7 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             flash('Animal enregistré.');
         }
         // Lot, statut, dates : les indices de l'année en cours (et de l'année de sortie) sont recalculés
-        maj_indices_auto($pdo, date('Y-m-d'), $d['date_sortie'], $d['date_naissance'] ?? null);
+        maj_indices_auto($pdo, date('Y-m-d'), $d['date_sortie'], $d['date_naissance'], $d['date_sevrage']);
         redirect('animal.php?id=' . $id);
     }
     $a = array_merge($a, $d);
@@ -125,6 +125,8 @@ require 'includes/header.php';
         <div class="col-md-4"><label class="form-label">Robe</label><input name="robe" class="form-control" value="<?= e($a['robe'] ?? '') ?>"></div>
         <div class="col-md-4"><label class="form-label">Date de naissance</label><input type="date" name="date_naissance" class="form-control" value="<?= e($a['date_naissance'] ?? '') ?>"></div>
         <div class="col-md-4"><label class="form-label">Poids de naissance (kg)</label><input type="number" step="0.1" min="0" name="poids_naissance" class="form-control" value="<?= e($a['poids_naissance'] ?? '') ?>"></div>
+        <div class="col-md-4"><label class="form-label">Date de sevrage</label><input type="date" name="date_sevrage" class="form-control" value="<?= e($a['date_sevrage'] ?? '') ?>"></div>
+        <div class="col-md-4"><label class="form-label">Poids au sevrage (kg)</label><input type="number" step="0.1" min="0" name="poids_sevrage" class="form-control" value="<?= e($a['poids_sevrage'] ?? '') ?>" placeholder="sinon pesée la plus proche"></div>
       </div>
     </div>
 

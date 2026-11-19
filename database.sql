@@ -7,7 +7,8 @@ CREATE DATABASE IF NOT EXISTS troupeau CHARACTER SET utf8mb4 COLLATE utf8mb4_uni
 USE troupeau;
 
 SET FOREIGN_KEY_CHECKS = 0;
-DROP TABLE IF EXISTS indices_resultats, indices_interpretations, indices, mouvements, sante, reproductions, controles_laitiers, pesees, animaux, lots, races, especes, utilisateurs;
+DROP VIEW IF EXISTS v_indices_resultats;
+DROP TABLE IF EXISTS indices_resultats, indices_interpretations, indices, alimentation, parametres_app, mouvements, sante, reproductions, controles_laitiers, pesees, animaux, lots, races, especes, utilisateurs;
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ---------------------------------------------------------------------
@@ -48,6 +49,8 @@ CREATE TABLE animaux (
   robe                  VARCHAR(60) NULL,
   date_naissance        DATE NULL,
   poids_naissance       DECIMAL(6,2) NULL,
+  date_sevrage          DATE NULL,
+  poids_sevrage         DECIMAL(6,2) NULL COMMENT 'kg ; si vide, pesée la plus proche de la date de sevrage',
   mere_id               INT NULL,
   pere_id               INT NULL,
   origine               ENUM('naissance','achat') NOT NULL DEFAULT 'naissance',
@@ -114,6 +117,7 @@ CREATE TABLE reproductions (
   semence              VARCHAR(100) NULL COMMENT 'Taureau / référence paillette (IA)',
   resultat             ENUM('positif','negatif') NULL COMMENT 'Pour les diagnostics',
   nb_petits            TINYINT NULL,
+  nb_morts_nes         TINYINT NULL COMMENT 'Petits mort-nés (survie des chevreaux)',
   date_mise_bas_prevue DATE NULL,
   intervenant          VARCHAR(100) NULL,
   observations         VARCHAR(255) NULL,
@@ -176,54 +180,102 @@ CREATE TABLE utilisateurs (
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
--- Indices paramétrables (formules, interprétations, résultats enregistrés)
+-- Paramètres généraux de l'application
 -- ---------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS indices (
-  id          INT AUTO_INCREMENT PRIMARY KEY,
-  code        VARCHAR(30)  NOT NULL UNIQUE,
-  nom         VARCHAR(100) NOT NULL,
-  description VARCHAR(255) NULL,
-  formule     TEXT NOT NULL COMMENT 'Expression utilisant les variables de base (voir includes/indices.php)',
-  unite       VARCHAR(20) NULL,
-  decimales   TINYINT NOT NULL DEFAULT 1,
-  espece_id   INT NULL COMMENT 'NULL = toutes les espèces',
-  sexe        ENUM('M','F') NULL COMMENT 'NULL = les deux sexes',
-  niveaux     SET('animal','lot','espece','troupeau') NOT NULL DEFAULT 'animal,lot,espece,troupeau',
-  agregation  ENUM('moyenne','somme','min','max','ratio') NOT NULL DEFAULT 'moyenne' COMMENT 'Calcul pour lot / espèce / troupeau',
-  ordre       SMALLINT NOT NULL DEFAULT 0,
-  actif       TINYINT(1) NOT NULL DEFAULT 1,
-  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+CREATE TABLE parametres_app (
+  cle     VARCHAR(50) PRIMARY KEY,
+  valeur  VARCHAR(255) NOT NULL,
+  libelle VARCHAR(150) NULL
+) ENGINE=InnoDB;
+
+-- ---------------------------------------------------------------------
+-- Alimentation (aliment distribué, pour l'indice de consommation)
+-- ---------------------------------------------------------------------
+CREATE TABLE alimentation (
+  id                INT AUTO_INCREMENT PRIMARY KEY,
+  animal_id         INT NOT NULL,
+  date_distribution DATE NOT NULL,
+  aliment           VARCHAR(100) NOT NULL,
+  quantite_kg       DECIMAL(8,2) NOT NULL,
+  cout              DECIMAL(10,2) NULL,
+  observations      VARCHAR(255) NULL,
+  KEY idx_alim (animal_id, date_distribution),
+  CONSTRAINT fk_alim_animal FOREIGN KEY (animal_id) REFERENCES animaux(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- ---------------------------------------------------------------------
+-- Indices de productivité : définition (formule modifiable), seuils
+-- d'interprétation (généraux ou par espèce) et résultats enregistrés
+-- ---------------------------------------------------------------------
+CREATE TABLE indices (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  code           VARCHAR(10)  NOT NULL UNIQUE COMMENT 'R01, L02… utilisable dans les autres formules',
+  nom            VARCHAR(100) NOT NULL,
+  famille        ENUM('reproduction','lait','croissance','sante','globale') NOT NULL,
+  description    VARCHAR(255) NULL COMMENT 'Mode de calcul en clair',
+  formule        TEXT NOT NULL,
+  unite          VARCHAR(30) NULL,
+  decimales      TINYINT NOT NULL DEFAULT 1,
+  periode        ENUM('campagne','lactation','jour') NOT NULL DEFAULT 'campagne' COMMENT 'Granularité du calcul',
+  niveaux        SET('animal','lot','espece','troupeau') NOT NULL DEFAULT 'animal,lot,espece,troupeau',
+  agregation     ENUM('ratio','moyenne','somme','min','max') NOT NULL DEFAULT 'ratio',
+  sens           ENUM('haut','bas','cible','neutre') NOT NULL DEFAULT 'haut' COMMENT 'Sens d''une valeur favorable',
+  interpretation VARCHAR(255) NULL,
+  espece_id      INT NULL COMMENT 'NULL = toutes les espèces',
+  sexe           ENUM('M','F') NULL,
+  ordre          SMALLINT NOT NULL DEFAULT 0,
+  actif          TINYINT(1) NOT NULL DEFAULT 1,
+  created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   CONSTRAINT fk_indice_espece FOREIGN KEY (espece_id) REFERENCES especes(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
-CREATE TABLE IF NOT EXISTS indices_interpretations (
+CREATE TABLE indices_interpretations (
   id        INT AUTO_INCREMENT PRIMARY KEY,
   indice_id INT NOT NULL,
-  borne_min DECIMAL(16,4) NULL COMMENT 'Inclus ; NULL = pas de minimum',
-  borne_max DECIMAL(16,4) NULL COMMENT 'Exclu ; NULL = pas de maximum',
+  espece_id INT NULL COMMENT 'NULL = seuil général ; sinon prioritaire pour cette espèce',
+  borne_min DECIMAL(16,4) NULL COMMENT 'Incluse',
+  borne_max DECIMAL(16,4) NULL COMMENT 'Exclue',
   libelle   VARCHAR(80) NOT NULL,
   couleur   VARCHAR(20) NOT NULL DEFAULT 'secondary',
   ordre     SMALLINT NOT NULL DEFAULT 0,
-  CONSTRAINT fk_interp_indice FOREIGN KEY (indice_id) REFERENCES indices(id) ON DELETE CASCADE
+  CONSTRAINT fk_interp_indice FOREIGN KEY (indice_id) REFERENCES indices(id) ON DELETE CASCADE,
+  CONSTRAINT fk_interp_espece FOREIGN KEY (espece_id) REFERENCES especes(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
-CREATE TABLE IF NOT EXISTS indices_resultats (
+CREATE TABLE indices_resultats (
   id             INT AUTO_INCREMENT PRIMARY KEY,
   indice_id      INT NOT NULL,
-  annee          SMALLINT NOT NULL,
+  campagne       SMALLINT NOT NULL COMMENT 'Année de début de campagne',
+  periode        ENUM('campagne','lactation','jour') NOT NULL,
+  periode_cle    VARCHAR(20) NOT NULL COMMENT 'Campagne, L+date de mise bas, ou date du contrôle',
+  date_debut     DATE NULL,
+  date_fin       DATE NULL,
   niveau         ENUM('animal','lot','espece','troupeau') NOT NULL,
-  cible_id       INT NOT NULL DEFAULT 0 COMMENT 'id animal / lot / espèce ; 0 pour le troupeau',
+  cible_id       INT NOT NULL DEFAULT 0 COMMENT 'id animal / lot / espèce ; 0 = troupeau',
   valeur         DECIMAL(16,4) NOT NULL,
   nb_animaux     INT NOT NULL DEFAULT 1,
   interpretation VARCHAR(80) NULL,
   couleur        VARCHAR(20) NULL,
-  formule        TEXT NOT NULL COMMENT 'Formule utilisée lors du calcul',
+  formule        TEXT NOT NULL COMMENT 'Formule utilisée au moment du calcul',
   calcule_le     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY uq_resultat (indice_id, annee, niveau, cible_id),
-  KEY idx_cible (niveau, cible_id, annee),
+  UNIQUE KEY uq_resultat (indice_id, niveau, cible_id, periode_cle),
+  KEY idx_campagne (campagne, niveau),
+  KEY idx_cible (niveau, cible_id),
   CONSTRAINT fk_res_indice FOREIGN KEY (indice_id) REFERENCES indices(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
+
+-- Vue de restitution (tableur, outil de BI, requêtes)
+CREATE OR REPLACE VIEW v_indices_resultats AS
+SELECT r.campagne, r.periode, r.periode_cle, r.date_debut, r.date_fin, r.niveau, r.cible_id,
+       CASE r.niveau WHEN 'animal' THEN CONCAT(a.numero_identification, ' ', IFNULL(a.nom,''))
+                     WHEN 'lot' THEN l.nom WHEN 'espece' THEN e.nom ELSE 'Troupeau' END AS cible,
+       i.code, i.nom AS indice, i.famille, i.unite, r.valeur, r.interpretation, r.nb_animaux, r.formule, r.calcule_le
+FROM indices_resultats r
+JOIN indices i ON i.id = r.indice_id
+LEFT JOIN animaux a ON r.niveau = 'animal' AND a.id = r.cible_id
+LEFT JOIN lots    l ON r.niveau = 'lot'    AND l.id = r.cible_id
+LEFT JOIN especes e ON r.niveau = 'espece' AND e.id = r.cible_id;
 
 -- =====================================================================
 --  Données de démonstration
@@ -243,7 +295,7 @@ INSERT INTO lots (id, nom, type, description) VALUES
  (4,'Pâturage nord','paturage','Parcelle de 6 ha');
 
 INSERT INTO animaux (id, numero_identification, nom, espece_id, race_id, sexe, categorie, robe, date_naissance, poids_naissance, mere_id, pere_id, origine, date_entree, prix_achat, lot_id) VALUES
- (1,'BV-0001','Bella', 1,1,'F','vache',   'Pie noire', '2020-03-12',38,NULL,NULL,'naissance','2020-03-12',NULL,1),
+ (1,'BV-0001','Bella', 1,1,'F','vache',   'Pie noire', '2020-03-12',38,NULL,NULL,'achat',    '2022-06-01',1800,1),
  (2,'BV-0002','Rose',  1,2,'F','vache',   'Pie rouge', '2019-05-02',42,NULL,NULL,'achat',    '2023-09-15',4200,1),
  (3,'BV-0003','Titan', 1,1,'M','taureau', 'Pie noire', '2018-02-10',45,NULL,NULL,'achat',    '2021-01-20',6500,4),
  (4,'BV-0004','Perle', 1,1,'F','veau',    'Pie noire', '2026-02-15',40,1,3,      'naissance','2026-02-15',NULL,2),
@@ -286,27 +338,238 @@ INSERT INTO mouvements (animal_id, date_mouvement, type, lot_origine, lot_destin
  (4,'2026-05-15','transfert',1,2,'Sevrage',NULL);
 
 -- ---------------------------------------------------------------------
---  Indices fournis par défaut (modifiables dans Paramètres)
+-- Troupeau caprin de démonstration (indices R, L, C, S, P)
 -- ---------------------------------------------------------------------
-INSERT INTO indices (id, code, nom, description, formule, unite, decimales, espece_id, sexe, niveaux, agregation, ordre) VALUES
- (1, 'LAIT_MOY',  'Production laitière moyenne', 'Moyenne des contrôles laitiers de l''année', 'lait_moyen', 'L/j', 1, 1, 'F', 'animal,lot,espece,troupeau', 'moyenne', 10),
- (2, 'LAIT_TOT',  'Lait produit', 'Cumul estimé entre le premier et le dernier contrôle', 'lait_cumul', 'L', 0, NULL, 'F', 'animal,lot,espece,troupeau', 'somme', 20),
- (3, 'MAT_UTILE', 'Matière utile', 'Matière grasse + matière protéique produites', 'lait_cumul * (tb_moyen + tp_moyen) / 1000', 'kg', 1, NULL, 'F', 'animal,lot,espece,troupeau', 'somme', 30),
- (4, 'TB_TP',     'Rapport TB / TP', 'Indicateur d''équilibre de la ration', 'tb_moyen / tp_moyen', NULL, 2, NULL, 'F', 'animal,lot,espece,troupeau', 'moyenne', 40),
- (5, 'CELLULES',  'Cellules moyennes', 'Santé de la mamelle (×1000 cellules/mL)', 'cellules_moyen', '×1000/mL', 0, NULL, 'F', 'animal,lot,espece,troupeau', 'moyenne', 50),
- (6, 'GMQ',       'Gain moyen quotidien', 'Croissance des jeunes de moins de 24 mois entre la première et la dernière pesée de l''année', 'si(age_mois < 24, gmq)', 'g/j', 0, NULL, NULL, 'animal,lot,espece,troupeau', 'moyenne', 60),
- (7, 'IVV',       'Intervalle vêlage-vêlage', 'Intervalle moyen entre deux mises bas', 'ivv', 'j', 0, 1, 'F', 'animal,lot,espece,troupeau', 'moyenne', 70),
- (8, 'GESTATION', 'Taux de gestation', 'Diagnostics positifs / diagnostics réalisés', 'nb_diag_pos / (nb_diag_pos + nb_diag_neg) * 100', '%', 0, NULL, 'F', 'animal,lot,espece,troupeau', 'ratio', 80),
- (9, 'PROLIF',    'Prolificité', 'Nombre de petits nés par mise bas', 'nb_petits / nb_mises_bas', NULL, 2, 2, 'F', 'animal,lot,espece,troupeau', 'ratio', 90),
- (10,'MORTALITE', 'Taux de mortalité', 'Animaux morts / animaux présents', 'mort / nb_animaux * 100', '%', 1, NULL, NULL, 'lot,espece,troupeau', 'ratio', 100),
- (11,'COUT_SANTE','Coût sanitaire', 'Dépenses de santé de l''année par animal', 'cout_sante', NULL, 2, NULL, NULL, 'animal,lot,espece,troupeau', 'moyenne', 110);
+INSERT INTO lots (id, nom, type, description) VALUES
+ (5,'Chèvrerie','batiment','Chèvres laitières'),
+ (6,'Parcours sud','paturage','Parcours boisé de 12 ha'),
+ (7,'Nurserie','batiment','Chevreaux et chevrettes');
 
-INSERT INTO indices_interpretations (indice_id, borne_min, borne_max, libelle, couleur, ordre) VALUES
- (1, NULL, 15, 'Faible', 'danger', 1), (1, 15, 25, 'Moyenne', 'warning', 2), (1, 25, NULL, 'Bonne', 'success', 3),
- (4, NULL, 1, 'Risque d''acidose', 'danger', 1), (4, 1, 1.5, 'Équilibré', 'success', 2), (4, 1.5, NULL, 'Risque de cétose', 'warning', 3),
- (5, NULL, 200, 'Mamelle saine', 'success', 1), (5, 200, 300, 'À surveiller', 'warning', 2), (5, 300, NULL, 'Mammite subclinique probable', 'danger', 3),
- (6, NULL, 600, 'Croissance faible', 'danger', 1), (6, 600, 900, 'Croissance correcte', 'warning', 2), (6, 900, NULL, 'Bonne croissance', 'success', 3),
- (7, NULL, 380, 'Objectif atteint', 'success', 1), (7, 380, 420, 'Acceptable', 'warning', 2), (7, 420, NULL, 'Trop long', 'danger', 3),
- (8, NULL, 40, 'Mauvaise fertilité', 'danger', 1), (8, 40, 60, 'Fertilité moyenne', 'warning', 2), (8, 60, NULL, 'Bonne fertilité', 'success', 3),
- (9, NULL, 1.2, 'Faible', 'warning', 1), (9, 1.2, 1.6, 'Moyenne', 'info', 2), (9, 1.6, NULL, 'Élevée', 'success', 3),
- (10, NULL, 3, 'Normal', 'success', 1), (10, 3, 6, 'À surveiller', 'warning', 2), (10, 6, NULL, 'Élevé', 'danger', 3);
+INSERT INTO animaux (id, numero_identification, nom, espece_id, race_id, sexe, categorie, robe, date_naissance, poids_naissance, date_sevrage, poids_sevrage, mere_id, pere_id, origine, date_entree, prix_achat, lot_id, statut, date_sortie, motif_sortie) VALUES
+ (11,'CP-0005','Zorro',   3,6,'M','bouc',    'Chamoisée','2021-01-10',3.8,NULL,NULL,NULL,NULL,'achat','2022-08-01',350,5,'actif',NULL,NULL),
+ (7, 'CP-0001','Noisette',3,6,'F','chèvre',  'Chamoisée','2022-03-01',3.4,NULL,NULL,NULL,NULL,'achat','2024-06-01',240,5,'actif',NULL,NULL),
+ (8, 'CP-0002','Câline',  3,7,'F','chèvre',  'Blanche',  '2022-02-15',3.6,NULL,NULL,NULL,NULL,'achat','2024-06-01',260,5,'actif',NULL,NULL),
+ (9, 'CP-0003','Praline', 3,6,'F','chèvre',  'Chamoisée','2025-02-01',3.2,'2025-04-25',13.8,7,11,'naissance','2025-02-01',NULL,5,'actif',NULL,NULL),
+ (10,'CP-0004','Vanille', 3,6,'F','chèvre',  'Pie',      '2023-03-01',3.3,NULL,NULL,NULL,NULL,'achat','2024-06-01',220,5,'actif',NULL,NULL),
+ (17,'CP-0006','Biscotte',3,7,'F','chèvre',  'Blanche',  '2017-03-01',NULL,NULL,NULL,NULL,NULL,'achat','2019-05-10',180,5,'reforme','2026-07-01','Âge, mamelle déséquilibrée'),
+ (12,'CP-0101','Grisette',3,6,'F','chevrette','Chamoisée','2026-02-06',3.5,'2026-05-01',NULL,7,11,'naissance','2026-02-06',NULL,7,'actif',NULL,NULL),
+ (13,'CP-0102',NULL,      3,6,'M','chevreau', 'Chamoisée','2026-02-06',2.4,NULL,NULL,7,11,'naissance','2026-02-06',NULL,7,'mort','2026-02-20','Faiblesse néonatale'),
+ (14,'CP-0103','Myrtille',3,7,'F','chevrette','Blanche',  '2026-03-03',3.2,'2026-05-10',15.2,8,11,'naissance','2026-03-03',NULL,7,'actif',NULL,NULL),
+ (15,'CP-0104','Filou',   3,7,'M','chevreau', 'Blanche',  '2026-03-03',3.6,'2026-05-10',16.8,8,11,'naissance','2026-03-03',NULL,7,'vendu','2026-06-15','Vente chevreau'),
+ (16,'CP-0105','Cannelle',3,6,'F','chevrette','Chamoisée','2026-02-25',3.0,'2026-05-20',13.0,9,11,'naissance','2026-02-25',NULL,7,'actif',NULL,NULL),
+ (18,'CP-0090',NULL,3,6,'M','chevreau','Chamoisée','2025-02-01',3.5,'2025-04-25',14.6,7,11,'naissance','2025-02-01',NULL,7,'vendu','2025-05-20','Vente chevreau'),
+ (19,'CP-0091',NULL,3,7,'F','chevrette','Blanche','2025-03-10',3.3,'2025-05-15',14.9,8,11,'naissance','2025-03-10',NULL,7,'vendu','2025-06-10','Vente chevrette'),
+ (20,'CP-0092',NULL,3,7,'M','chevreau','Blanche','2025-03-10',3.6,'2025-05-15',15.8,8,11,'naissance','2025-03-10',NULL,7,'vendu','2025-06-10','Vente chevreau'),
+ (21,'CP-0093',NULL,3,6,'M','chevreau','Pie','2025-02-20',3.1,NULL,NULL,10,11,'naissance','2025-02-20',NULL,7,'mort','2025-03-05','Diarrhée néonatale'),
+ (22,'CP-0094',NULL,3,7,'F','chevrette','Blanche','2025-03-01',3.0,'2025-05-10',12.4,17,11,'naissance','2025-03-01',NULL,7,'vendu','2025-06-10','Vente chevrette');
+
+INSERT INTO reproductions (animal_id, type_evenement, date_evenement, male_id, semence, resultat, nb_petits, date_mise_bas_prevue, intervenant) VALUES
+ (8,'saillie','2024-09-20',11,NULL,NULL,NULL,'2025-02-17',NULL),
+ (10,'saillie','2024-09-22',11,NULL,NULL,NULL,'2025-02-19',NULL),
+ (17,'saillie','2024-10-01',11,NULL,NULL,NULL,'2025-02-28',NULL),
+ (7,'saillie','2024-09-05',11,NULL,NULL,NULL,'2025-02-02',NULL),
+ (7,'mise_bas','2025-02-01',NULL,NULL,NULL,2,NULL,NULL),
+ (7,'tarissement','2025-11-15',NULL,NULL,NULL,NULL,NULL,NULL),
+ (7,'saillie','2025-09-10',11,NULL,NULL,NULL,'2026-02-07',NULL),
+ (7,'diagnostic','2025-10-25',NULL,NULL,'positif',NULL,NULL,'Échographie'),
+ (7,'mise_bas','2026-02-06',NULL,NULL,NULL,2,NULL,NULL),
+ (7,'tarissement','2026-11-01',NULL,NULL,NULL,NULL,NULL,NULL),
+ (8,'mise_bas','2025-03-10',NULL,NULL,NULL,2,NULL,NULL),
+ (8,'insemination','2025-09-12',NULL,'SA-Bouc 22',NULL,NULL,'2026-02-09','Inséminateur coop.'),
+ (8,'chaleur','2025-10-03',NULL,NULL,NULL,NULL,NULL,NULL),
+ (8,'saillie','2025-10-04',11,NULL,NULL,NULL,'2026-03-03',NULL),
+ (8,'diagnostic','2025-11-20',NULL,NULL,'positif',NULL,NULL,'Échographie'),
+ (8,'mise_bas','2026-03-03',NULL,NULL,NULL,3,NULL,NULL),
+ (9,'saillie','2025-09-25',11,NULL,NULL,NULL,'2026-02-22',NULL),
+ (9,'diagnostic','2025-11-05',NULL,NULL,'positif',NULL,NULL,'Échographie'),
+ (9,'mise_bas','2026-02-25',NULL,NULL,NULL,1,NULL,NULL),
+ (9,'tarissement','2026-10-15',NULL,NULL,NULL,NULL,NULL,NULL),
+ (10,'mise_bas','2025-02-20',NULL,NULL,NULL,1,NULL,NULL),
+ (10,'saillie','2025-09-15',11,NULL,NULL,NULL,'2026-02-12',NULL),
+ (10,'diagnostic','2025-11-01',NULL,NULL,'negatif',NULL,NULL,'Échographie'),
+ (10,'saillie','2025-11-10',11,NULL,NULL,NULL,'2026-04-09',NULL),
+ (10,'diagnostic','2025-12-20',NULL,NULL,'positif',NULL,NULL,'Échographie'),
+ (10,'avortement','2026-03-10',NULL,NULL,NULL,NULL,NULL,NULL),
+ (17,'mise_bas','2025-03-01',NULL,NULL,NULL,1,NULL,NULL),
+ (17,'saillie','2025-09-20',11,NULL,NULL,NULL,'2026-02-17',NULL),
+ (17,'diagnostic','2025-11-01',NULL,NULL,'negatif',NULL,NULL,'Échographie');
+
+INSERT INTO pesees (animal_id, date_pesee, poids, note_etat_corporel, methode) VALUES
+ (9,'2025-02-01',3.2,NULL,'balance'),(9,'2025-03-01',7.5,NULL,'balance'),(9,'2025-04-25',13.8,NULL,'balance'),
+ (12,'2026-02-06',3.5,NULL,'balance'),(12,'2026-03-06',8.0,NULL,'balance'),(12,'2026-04-06',11.8,NULL,'balance'),(12,'2026-05-01',14.5,NULL,'balance'),
+ (14,'2026-03-03',3.2,NULL,'balance'),(14,'2026-04-03',8.4,NULL,'balance'),(14,'2026-05-10',15.2,NULL,'balance'),
+ (15,'2026-03-03',3.6,NULL,'balance'),(15,'2026-04-03',9.1,NULL,'balance'),(15,'2026-05-10',16.8,NULL,'balance'),
+ (16,'2026-02-25',3.0,NULL,'balance'),(16,'2026-04-01',8.2,NULL,'balance'),(16,'2026-05-20',13.0,NULL,'balance'),
+ (7,'2026-01-10',62,3.5,'balance'),(7,'2026-06-10',58,2.75,'balance'),(7,'2026-10-10',61,3.0,'balance'),
+ (8,'2026-01-10',68,3.5,'balance'),(8,'2026-09-10',66,3.0,'balance');
+
+INSERT INTO controles_laitiers (animal_id, date_controle, traite_matin, traite_soir, taux_butyreux, taux_proteique, cellules) VALUES
+ (7,'2025-03-01',3.0,2.5,34.5,30.5,520),(7,'2025-05-01',3.2,2.7,33.8,30.9,610),(7,'2025-07-01',2.6,2.1,35.9,32.0,700),(7,'2025-09-01',1.9,1.6,38.4,33.6,850),
+ (7,'2026-03-01',3.2,2.6,34.0,30.2,450),(7,'2026-04-01',3.6,3.0,33.5,30.0,480),(7,'2026-05-01',3.3,2.8,34.2,30.8,520),(7,'2026-06-01',3.0,2.5,35.0,31.5,600),
+ (7,'2026-07-01',2.6,2.2,36.1,32.2,640),(7,'2026-08-01',2.2,1.9,37.5,33.0,700),(7,'2026-09-01',1.8,1.5,38.8,34.0,760),(7,'2026-10-01',1.4,1.1,40.2,35.1,800),
+ (8,'2026-04-01',3.9,3.3,32.5,29.5,380),(8,'2026-05-01',4.2,3.6,32.0,29.2,350),(8,'2026-06-01',4.0,3.4,32.8,29.8,400),(8,'2026-07-01',3.6,3.1,33.6,30.4,420),
+ (8,'2026-08-01',3.2,2.7,34.5,31.0,450),(8,'2026-09-01',2.8,2.4,35.4,31.8,480),(8,'2026-10-01',2.4,2.0,36.6,32.6,520),(8,'2026-11-01',2.0,1.7,37.8,33.4,560),
+ (9,'2026-04-01',2.0,1.6,35.0,31.0,300),(9,'2026-05-01',2.2,1.8,34.6,30.8,320),(9,'2026-06-01',2.1,1.7,35.2,31.2,340),
+ (9,'2026-07-01',1.9,1.5,36.0,31.9,380),(9,'2026-08-01',1.6,1.3,37.2,32.8,420),(9,'2026-09-01',1.3,1.0,38.5,33.7,470);
+
+INSERT INTO alimentation (animal_id, date_distribution, aliment, quantite_kg, cout) VALUES
+ (7,'2026-03-31','Concentré chèvre laitière',24,9.6),(7,'2026-04-30','Concentré chèvre laitière',27,10.8),(7,'2026-05-31','Concentré chèvre laitière',25,10.0),(7,'2026-06-30','Concentré chèvre laitière',24,9.6),
+ (8,'2026-04-30','Concentré chèvre laitière',28,11.2),(8,'2026-05-31','Concentré chèvre laitière',30,12.0),(8,'2026-06-30','Concentré chèvre laitière',29,11.6),(8,'2026-07-31','Concentré chèvre laitière',27,10.8),
+ (12,'2026-03-06','Lait en poudre',9,22.0),(12,'2026-04-06','Granulé démarrage',8,4.8),(12,'2026-05-01','Granulé démarrage',10,6.0),
+ (14,'2026-04-03','Lait en poudre',10,24.0),(14,'2026-05-10','Granulé démarrage',11,6.6);
+
+INSERT INTO sante (animal_id, date_intervention, type, diagnostic, produit, dose, voie, veterinaire, delai_attente_lait, delai_attente_viande, cout, date_rappel) VALUES
+ (12,'2026-04-15','vermifuge','Coccidiose (prévention)','Toltrazuril','2 mL','Orale',NULL,0,63,3,NULL),
+ (10,'2026-03-11','traitement','Métrite après avortement','Oxytétracycline','5 mL','IM','Dr Vétérinaire',7,28,35,NULL);
+
+INSERT INTO mouvements (animal_id, date_mouvement, type, lot_origine, lot_destination, motif, montant) VALUES
+ (11,'2022-08-01','entree',NULL,5,'Achat bouc',350),(7,'2024-06-01','entree',NULL,5,'Achat',240),(8,'2024-06-01','entree',NULL,5,'Achat',260),(10,'2024-06-01','entree',NULL,5,'Achat',220),(17,'2019-05-10','entree',NULL,5,'Achat',180),
+ (7,'2026-05-15','transfert',5,6,'Mise au parcours',NULL),(8,'2026-05-15','transfert',5,6,'Mise au parcours',NULL),(9,'2026-05-15','transfert',5,6,'Mise au parcours',NULL),
+ (10,'2026-05-15','transfert',5,6,'Mise au parcours',NULL),(11,'2026-05-15','transfert',5,6,'Mise au parcours',NULL),
+ (7,'2026-10-15','transfert',6,5,'Rentrée en bâtiment',NULL),(8,'2026-10-15','transfert',6,5,'Rentrée en bâtiment',NULL),(9,'2026-10-15','transfert',6,5,'Rentrée en bâtiment',NULL),
+ (10,'2026-10-15','transfert',6,5,'Rentrée en bâtiment',NULL),(11,'2026-10-15','transfert',6,5,'Rentrée en bâtiment',NULL),
+ (13,'2026-02-20','sortie',7,NULL,'Mort – faiblesse néonatale',NULL),(18,'2025-05-20','sortie',7,NULL,'Vendu',95),(19,'2025-06-10','sortie',7,NULL,'Vendu',90),(20,'2025-06-10','sortie',7,NULL,'Vendu',95),(21,'2025-03-05','sortie',7,NULL,'Mort – diarrhée néonatale',NULL),(22,'2025-06-10','sortie',7,NULL,'Vendu',85),(15,'2026-06-15','sortie',7,NULL,'Vendu – vente chevreau',120),(17,'2026-07-01','sortie',5,NULL,'Réformé – âge',90);
+
+-- =====================================================================
+--  Indices de productivité (spécification – modifiables dans Paramètres)
+-- =====================================================================
+INSERT INTO parametres_app (cle, valeur, libelle) VALUES ('debut_campagne_mois','9','Mois de début de la campagne (1 = année civile)');
+
+INSERT INTO indices (id, code, nom, famille, description, formule, unite, decimales, periode, niveaux, agregation, sens, interpretation, espece_id, sexe, ordre) VALUES
+ (1,'R01','Taux de fertilité','reproduction','(Femelles gestantes ÷ femelles saillies) × 100 – saillies dont le résultat est connu','gestante / saillie_diag * 100','%',1,'campagne','lot,espece,troupeau','ratio','haut','Élevé = bonne aptitude à concevoir',NULL,'F',10),
+ (2,'R02','Taux de fécondité','reproduction','(Femelles ayant mis bas ÷ femelles saillies) × 100 – saillies arrivées à terme','mb_suite_saillie / saillie_bilan * 100','%',1,'campagne','lot,espece,troupeau','ratio','haut','Intègre conception + maintien de la gestation',NULL,'F',20),
+ (3,'R03','Taux de mise-bas','reproduction','(Nb de mises bas ÷ femelles mises à la reproduction) × 100','nb_mb_issues / saillie_bilan * 100','%',1,'campagne','lot,espece,troupeau','ratio','haut','Réussite globale de la lutte',NULL,'F',30),
+ (4,'R04','Prolificité','reproduction','Petits nés ÷ nb de mises bas','nb_petits / nb_mises_bas','petits/portée',2,'campagne','animal,lot,espece,troupeau','ratio','haut','Élevé = portées multiples',NULL,'F',40),
+ (5,'R05','Indice de saillie','reproduction','Nb de saillies ÷ nb de gestations obtenues (par femelle ou par mâle)','si(femelle, nb_saillies_bilan / nb_gestations, saillies_male / gestations_male)','ratio',2,'campagne','animal,lot,espece,troupeau','ratio','bas','Proche de 1 = très efficace',NULL,NULL,50),
+ (6,'R06','Taux de retour en chaleur','reproduction','(Femelles revenues en chaleur ÷ femelles saillies) × 100','retour_chaleur / saillie * 100','%',1,'campagne','lot,espece,troupeau','ratio','bas','Bas = peu d''échecs de fécondation',NULL,'F',60),
+ (7,'R07','Taux d''avortement','reproduction','(Avortements ÷ gestations) × 100','nb_avortements_gest / nb_gestations * 100','%',1,'campagne','lot,espece,troupeau','ratio','bas','Bas = bon état sanitaire / nutrition',NULL,'F',70),
+ (8,'R08','Taux de gémellité','reproduction','(Mises bas multiples ÷ total des mises bas) × 100','nb_mb_multiples / nb_mises_bas * 100','%',1,'campagne','lot,espece,troupeau','ratio','haut','Élevé = potentiel de prolificité',NULL,'F',80),
+ (9,'R09','Âge à la 1re mise-bas','reproduction','Date de la 1re mise bas − date de naissance','age_1ere_mb_mois','mois',1,'campagne','animal,lot,espece,troupeau','moyenne','bas','Bas = précocité',NULL,'F',90),
+ (10,'R10','Intervalle entre mises bas (IMB)','reproduction','Jours entre deux mises bas successives','imb','jours',0,'campagne','animal,lot,espece,troupeau','moyenne','cible','Court (≈ 240–360 j) = bon rythme',NULL,'F',100),
+ (11,'L01','Production journalière','lait','Lait matin + lait soir','lait_jour','kg/jour',2,'jour','animal,lot,espece,troupeau','moyenne','haut','Suivi quotidien',NULL,'F',110),
+ (12,'L02','Production totale par lactation','lait','Σ des pesées de lait sur le cycle (méthode Fleischmann)','lait_lactation','kg',0,'lactation','animal,lot,espece,troupeau','moyenne','haut','Élevé = bonne productrice',NULL,'F',120),
+ (13,'L03','Durée de lactation','lait','Date de tarissement − date de mise bas','duree_lactation','jours',0,'lactation','animal,lot,espece,troupeau','moyenne','haut','Plus longue = plus de lait total',NULL,'F',130),
+ (14,'L04','Production moyenne par jour de lactation','lait','Production totale ÷ durée de lactation (jours en lait si non tarie)','L02 / sinon(L03, jours_en_lait)','kg/jour',2,'lactation','animal,lot,espece,troupeau','moyenne','haut','Indicateur de niveau laitier',NULL,'F',140),
+ (15,'L05','Persistance de lactation','lait','(Production de fin de cycle ÷ production au pic) × 100','lait_fin / lait_pic * 100','%',0,'lactation','animal,lot,espece,troupeau','moyenne','haut','Élevé = lactation régulière',NULL,'F',150),
+ (16,'C01','Gain moyen quotidien (GMQ)','croissance','(Poids final − poids initial) ÷ nb de jours – animaux de moins de 24 mois','si(age_mois < 24, gmq)','g/jour',0,'campagne','animal,lot,espece,troupeau','moyenne','haut','Élevé = bonne croissance',NULL,NULL,160),
+ (17,'C02','Poids au sevrage ajusté (90 j)','croissance','Poids ramené à un âge type de 90 jours','poids_naissance + (poids_sevrage - poids_naissance) / age_sevrage_jours * 90','kg',1,'campagne','animal,lot,espece,troupeau','moyenne','haut','Comparaison équitable entre individus',NULL,NULL,170),
+ (18,'C03','Indice de consommation (IC)','croissance','Aliment consommé ÷ gain de poids','si(aliment_kg > 0 et gain_poids > 0, aliment_kg / gain_poids)','kg/kg',2,'campagne','animal,lot,espece,troupeau','moyenne','bas','Bas = efficacité alimentaire (animaux rationnés)',NULL,NULL,180),
+ (19,'C04','Indice de valorisation des parcours','croissance','Production laitière ÷ jours sur parcours','si(jours_parcours > 0, lait_total / jours_parcours)','kg/jour',2,'campagne','animal,lot,espece,troupeau','moyenne','neutre','Adapté au système extensif',NULL,NULL,190),
+ (20,'S01','Taux de mortalité des chevreaux','sante','(Chevreaux morts ÷ chevreaux nés) × 100','petits_morts / petits_nes * 100','%',1,'campagne','animal,lot,espece,troupeau','ratio','bas','Bas = bonne conduite',NULL,'F',200),
+ (21,'S02','Taux de sevrage (viabilité)','sante','(Chevreaux sevrés ÷ chevreaux nés) × 100','petits_sevres / petits_nes * 100','%',1,'campagne','animal,lot,espece,troupeau','ratio','haut','Élevé = bonne survie',NULL,'F',210),
+ (22,'S03','Taux de réforme','sante','(Animaux réformés ÷ effectif) × 100','reforme / nb_animaux * 100','%',1,'campagne','lot,espece,troupeau','ratio','cible','Renouvellement du troupeau',NULL,NULL,220),
+ (23,'P01','Productivité numérique','globale','Nb de chevreaux sevrés par femelle et par an','petits_sevres / reproductrice','chevreaux/femelle/an',2,'campagne','animal,lot,espece,troupeau','ratio','haut','Indice synthétique majeur',NULL,'F',230),
+ (24,'P02','Productivité pondérale','globale','kg de chevreaux sevrés par femelle et par an','poids_petits_sevres / reproductrice','kg/femelle/an',1,'campagne','animal,lot,espece,troupeau','ratio','haut','Intègre prolificité + survie + croissance',NULL,'F',240),
+ (25,'P03','Score global de productivité','globale','Note pondérée 0–100 (femelles ayant mis bas) : lait 35 %, prolificité 25 %, survie 20 %, croissance des petits 20 %','si(nb_mises_bas > 0, moyenne_ponderee(note(lait_moyen, 1, 4), 35, note(R04, 1, 2), 25, note(S02, 70, 100), 20, note(gmq_petits, 80, 200), 20))','score 0–100',0,'campagne','animal,lot,espece,troupeau','moyenne','haut','Classement / sélection / réforme',3,'F',250);
+
+INSERT INTO indices_interpretations (indice_id, espece_id, borne_min, borne_max, libelle, couleur, ordre) VALUES
+ (1,NULL,NULL,70,'Faible','danger',1),
+ (1,NULL,70,85,'Moyen','warning',2),
+ (1,NULL,85,NULL,'Bon','success',3),
+ (2,NULL,NULL,60,'Faible','danger',1),
+ (2,NULL,60,80,'Moyen','warning',2),
+ (2,NULL,80,NULL,'Bon','success',3),
+ (3,NULL,NULL,70,'Faible','danger',1),
+ (3,NULL,70,90,'Moyen','warning',2),
+ (3,NULL,90,NULL,'Bon','success',3),
+ (4,3,NULL,1.2,'Faible','danger',1),
+ (4,3,1.2,1.6,'Moyenne','warning',2),
+ (4,3,1.6,NULL,'Élevée','success',3),
+ (4,2,NULL,1.2,'Faible','danger',4),
+ (4,2,1.2,1.6,'Moyenne','warning',5),
+ (4,2,1.6,NULL,'Élevée','success',6),
+ (5,NULL,NULL,1.5,'Très efficace','success',1),
+ (5,NULL,1.5,2,'Moyen','warning',2),
+ (5,NULL,2,NULL,'Peu efficace','danger',3),
+ (6,NULL,NULL,15,'Bas','success',1),
+ (6,NULL,15,30,'À surveiller','warning',2),
+ (6,NULL,30,NULL,'Élevé','danger',3),
+ (7,NULL,NULL,3,'Bas','success',1),
+ (7,NULL,3,5,'À surveiller','warning',2),
+ (7,NULL,5,NULL,'Élevé','danger',3),
+ (8,NULL,NULL,30,'Faible','warning',1),
+ (8,NULL,30,60,'Moyen','info',2),
+ (8,NULL,60,NULL,'Élevé','success',3),
+ (9,3,NULL,15,'Précoce','success',1),
+ (9,3,15,20,'Moyen','warning',2),
+ (9,3,20,NULL,'Tardif','danger',3),
+ (9,2,NULL,15,'Précoce','success',4),
+ (9,2,15,20,'Moyen','warning',5),
+ (9,2,20,NULL,'Tardif','danger',6),
+ (9,1,NULL,26,'Précoce','success',7),
+ (9,1,26,32,'Moyen','warning',8),
+ (9,1,32,NULL,'Tardif','danger',9),
+ (10,NULL,NULL,240,'Très court','warning',1),
+ (10,NULL,240,360,'Bon rythme','success',2),
+ (10,NULL,360,420,'Allongé','warning',3),
+ (10,NULL,420,NULL,'Trop long','danger',4),
+ (10,1,NULL,380,'Bon rythme','success',5),
+ (10,1,380,420,'Allongé','warning',6),
+ (10,1,420,NULL,'Trop long','danger',7),
+ (11,3,NULL,2,'Faible','danger',1),
+ (11,3,2,3.5,'Moyen','warning',2),
+ (11,3,3.5,NULL,'Bon','success',3),
+ (11,1,NULL,15,'Faible','danger',4),
+ (11,1,15,25,'Moyen','warning',5),
+ (11,1,25,NULL,'Bon','success',6),
+ (14,3,NULL,2,'Faible','danger',1),
+ (14,3,2,3.5,'Moyen','warning',2),
+ (14,3,3.5,NULL,'Bon','success',3),
+ (14,1,NULL,15,'Faible','danger',4),
+ (14,1,15,25,'Moyen','warning',5),
+ (14,1,25,NULL,'Bon','success',6),
+ (12,3,NULL,500,'Faible','danger',1),
+ (12,3,500,800,'Moyen','warning',2),
+ (12,3,800,NULL,'Bon','success',3),
+ (12,1,NULL,5000,'Faible','danger',4),
+ (12,1,5000,8000,'Moyen','warning',5),
+ (12,1,8000,NULL,'Bon','success',6),
+ (13,3,NULL,210,'Courte','danger',1),
+ (13,3,210,270,'Moyenne','warning',2),
+ (13,3,270,NULL,'Longue','success',3),
+ (13,1,NULL,250,'Courte','danger',4),
+ (13,1,250,305,'Moyenne','warning',5),
+ (13,1,305,NULL,'Longue','success',6),
+ (15,NULL,NULL,40,'Chute rapide','danger',1),
+ (15,NULL,40,60,'Moyenne','warning',2),
+ (15,NULL,60,NULL,'Régulière','success',3),
+ (16,NULL,NULL,100,'Faible','danger',1),
+ (16,NULL,100,150,'Moyen','warning',2),
+ (16,NULL,150,NULL,'Bon','success',3),
+ (16,1,NULL,600,'Faible','danger',4),
+ (16,1,600,900,'Moyen','warning',5),
+ (16,1,900,NULL,'Bon','success',6),
+ (17,3,NULL,12,'Faible','danger',1),
+ (17,3,12,15,'Moyen','warning',2),
+ (17,3,15,NULL,'Bon','success',3),
+ (17,1,NULL,90,'Faible','danger',4),
+ (17,1,90,110,'Moyen','warning',5),
+ (17,1,110,NULL,'Bon','success',6),
+ (18,NULL,NULL,4,'Efficace','success',1),
+ (18,NULL,4,6,'Moyen','warning',2),
+ (18,NULL,6,NULL,'Peu efficace','danger',3),
+ (20,NULL,NULL,5,'Bonne conduite','success',1),
+ (20,NULL,5,10,'À surveiller','warning',2),
+ (20,NULL,10,NULL,'Élevé','danger',3),
+ (21,NULL,NULL,85,'Faible','danger',1),
+ (21,NULL,85,95,'Moyen','warning',2),
+ (21,NULL,95,NULL,'Bon','success',3),
+ (22,NULL,NULL,15,'Renouvellement faible','warning',1),
+ (22,NULL,15,30,'Normal','success',2),
+ (22,NULL,30,NULL,'Élevé','danger',3),
+ (23,NULL,NULL,1.2,'Faible','danger',1),
+ (23,NULL,1.2,1.6,'Moyen','warning',2),
+ (23,NULL,1.6,NULL,'Bon','success',3),
+ (23,1,NULL,0.8,'Faible','danger',4),
+ (23,1,0.8,0.9,'Moyen','warning',5),
+ (23,1,0.9,NULL,'Bon','success',6),
+ (24,3,NULL,15,'Faible','danger',1),
+ (24,3,15,25,'Moyen','warning',2),
+ (24,3,25,NULL,'Bon','success',3),
+ (25,NULL,NULL,40,'À réformer','danger',1),
+ (25,NULL,40,60,'Moyenne','warning',2),
+ (25,NULL,60,80,'Bonne','info',3),
+ (25,NULL,80,NULL,'Élite – sélection','success',4);
+
+-- Câline : un chevreau mort-né sur la portée de trois
+UPDATE reproductions SET nb_morts_nes=1 WHERE animal_id=8 AND date_evenement='2026-03-03';
