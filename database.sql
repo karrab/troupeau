@@ -8,7 +8,7 @@ USE troupeau;
 
 SET FOREIGN_KEY_CHECKS = 0;
 DROP VIEW IF EXISTS v_indices_resultats;
-DROP TABLE IF EXISTS indices_resultats, indices_interpretations, indices, alimentation, parametres_app, mouvements, sante, reproductions, controles_laitiers, pesees, animaux, lots, races, especes, utilisateurs;
+DROP TABLE IF EXISTS mensurations, indices_resultats, indices_interpretations, indices, alimentation, parametres_app, mouvements, sante, reproductions, controles_laitiers, pesees, animaux, lots, races, especes, utilisateurs;
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ---------------------------------------------------------------------
@@ -207,6 +207,32 @@ CREATE TABLE alimentation (
   observations      VARCHAR(255) NULL,
   KEY idx_alim (animal_id, date_distribution),
   CONSTRAINT fk_alim_animal FOREIGN KEY (animal_id) REFERENCES animaux(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+-- ---------------------------------------------------------------------
+-- Mensurations : PMB + L1…L6 à la mise bas, W0…Wn + L1…L6 des chevreaux
+-- ---------------------------------------------------------------------
+CREATE TABLE mensurations (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  animal_id       INT NOT NULL,
+  type            ENUM('mise_bas','croissance') NOT NULL COMMENT 'mise_bas : mère (PMB) ; croissance : chevreau (W0, W1…)',
+  stade           SMALLINT NULL COMMENT 'Croissance : 0 = W0, 1 = W1…',
+  reproduction_id INT NULL COMMENT 'Mise bas concernée',
+  date_mesure     DATE NOT NULL,
+  poids           DECIMAL(7,2) NULL COMMENT 'kg : PMB ou poids au stade Wn',
+  l1              DECIMAL(6,1) NULL,
+  l2              DECIMAL(6,1) NULL,
+  l3              DECIMAL(6,1) NULL,
+  l4              DECIMAL(6,1) NULL,
+  l5              DECIMAL(6,1) NULL,
+  l6              DECIMAL(6,1) NULL,
+  pesee_id        INT NULL COMMENT 'Pesée créée à partir du poids',
+  observations    VARCHAR(255) NULL,
+  UNIQUE KEY uq_stade (animal_id, type, stade),
+  KEY idx_mens (animal_id, date_mesure),
+  CONSTRAINT fk_mens_animal FOREIGN KEY (animal_id) REFERENCES animaux(id) ON DELETE CASCADE,
+  CONSTRAINT fk_mens_repro  FOREIGN KEY (reproduction_id) REFERENCES reproductions(id) ON DELETE SET NULL,
+  CONSTRAINT fk_mens_pesee  FOREIGN KEY (pesee_id) REFERENCES pesees(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
@@ -601,3 +627,33 @@ CROSS JOIN (
 
 -- Câline : un chevreau mort-né sur la portée de trois
 UPDATE reproductions SET nb_morts_nes=1 WHERE animal_id=8 AND date_evenement='2026-03-03';
+
+-- Mensurations de démonstration (libellés L1…L6 à définir dans Paramètres)
+INSERT INTO mensurations (animal_id, type, stade, reproduction_id, date_mesure, poids, l1, l2, l3, l4, l5, l6) VALUES
+ (7, 'mise_bas',NULL,(SELECT id FROM reproductions WHERE animal_id=7 AND type_evenement='mise_bas' AND date_evenement='2026-02-06'),'2026-02-06',59.0,78.0,74.5,92.0,21.5,17.0,10.5),
+ (8, 'mise_bas',NULL,(SELECT id FROM reproductions WHERE animal_id=8 AND type_evenement='mise_bas' AND date_evenement='2026-03-03'),'2026-03-03',64.0,81.0,77.0,96.5,22.0,18.0,11.0),
+ (9, 'mise_bas',NULL,(SELECT id FROM reproductions WHERE animal_id=9 AND type_evenement='mise_bas' AND date_evenement='2026-02-25'),'2026-02-25',41.5,69.0,66.0,80.5,18.5,15.0,9.0),
+ (12,'croissance',0,NULL,'2026-02-06', 3.5,32.0,30.5,35.0,9.0,7.5,5.0),
+ (12,'croissance',1,NULL,'2026-02-13', 4.6,34.5,32.0,38.0,9.6,8.0,5.4),
+ (12,'croissance',2,NULL,'2026-02-20', 5.8,36.5,33.5,40.5,10.2,8.4,5.8),
+ (12,'croissance',3,NULL,'2026-02-27', 6.9,38.0,35.0,43.0,10.8,8.9,6.1),
+ (12,'croissance',4,NULL,'2026-03-06', 8.0,40.0,36.5,45.5,11.3,9.3,6.5),
+ (14,'croissance',0,NULL,'2026-03-03', 3.2,31.0,29.5,34.0,8.8,7.2,4.9),
+ (14,'croissance',1,NULL,'2026-03-10', 4.4,33.5,31.5,37.0,9.4,7.8,5.3),
+ (14,'croissance',2,NULL,'2026-03-17', 5.7,35.5,33.0,40.0,10.0,8.3,5.7),
+ (15,'croissance',0,NULL,'2026-03-03', 3.6,32.5,30.5,35.5,9.1,7.6,5.1),
+ (15,'croissance',1,NULL,'2026-03-10', 4.9,35.0,32.5,38.5,9.8,8.1,5.5),
+ (15,'croissance',2,NULL,'2026-03-17', 6.3,37.0,34.0,41.5,10.4,8.6,5.9),
+ (16,'croissance',0,NULL,'2026-02-25', 3.0,30.5,29.0,33.5,8.6,7.0,4.8),
+ (16,'croissance',1,NULL,'2026-03-04', 4.0,32.5,30.5,36.0,9.1,7.5,5.1);
+-- Le poids des mensurations est aussi une pesée (GMQ, poids au sevrage, indices)
+INSERT INTO pesees (animal_id, date_pesee, poids, methode, observations)
+SELECT m.animal_id, m.date_mesure, m.poids, 'balance', IF(m.type='mise_bas', 'Poids à la mise bas (PMB)', CONCAT('Mensuration W', m.stade))
+FROM mensurations m WHERE m.poids IS NOT NULL
+  AND NOT EXISTS (SELECT 1 FROM pesees p WHERE p.animal_id=m.animal_id AND p.date_pesee=m.date_mesure);
+UPDATE mensurations m JOIN pesees p ON p.animal_id=m.animal_id AND p.date_pesee=m.date_mesure SET m.pesee_id=p.id WHERE m.poids IS NOT NULL;
+
+INSERT INTO parametres_app (cle, valeur, libelle) VALUES
+ ('mesure_l1','','Libellé de la mesure L1'),('mesure_l2','','Libellé de la mesure L2'),('mesure_l3','','Libellé de la mesure L3'),
+ ('mesure_l4','','Libellé de la mesure L4'),('mesure_l5','','Libellé de la mesure L5'),('mesure_l6','','Libellé de la mesure L6'),
+ ('mesure_unite','cm','Unité des mesures L1 à L6');

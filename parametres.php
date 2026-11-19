@@ -31,6 +31,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare('UPDATE indices SET actif=1-actif, updated_at=NOW() WHERE id=?')->execute([(int)post('id')]);
                 recalculer_indices($pdo);
                 break;
+            case 'mesures':
+                $ins = $pdo->prepare('INSERT INTO parametres_app (cle, valeur, libelle) VALUES (?,?,?) ON DUPLICATE KEY UPDATE valeur=VALUES(valeur)');
+                foreach (MESURES as $k) $ins->execute(['mesure_' . $k, mb_substr(trim((string)($_POST[$k] ?? '')), 0, 60), 'Libellé de la mesure ' . strtoupper($k)]);
+                $ins->execute(['mesure_unite', mb_substr(trim((string)($_POST['unite'] ?? '')), 0, 10) ?: 'cm', 'Unité des mesures L1 à L6']);
+                break;
             case 'campagne':
                 $m = max(1, min(12, (int)post('debut_campagne_mois')));
                 $pdo->prepare("INSERT INTO parametres_app (cle, valeur, libelle) VALUES ('debut_campagne_mois', ?, 'Mois de début de la campagne') ON DUPLICATE KEY UPDATE valeur=VALUES(valeur)")->execute([$m]);
@@ -97,6 +102,17 @@ require 'includes/header.php';
       <div class="col-3 d-grid"><button class="btn btn-sm btn-primary"><i class="bi bi-plus"></i></button></div></form>
   </div></div>
 </div>
+<div class="card p-3 mt-3" id="mesures">
+  <h2 class="h6"><i class="bi bi-rulers"></i> Mensurations : signification de L1 à L6</h2>
+  <p class="small text-muted mb-2">Ces libellés s'affichent sur la fiche animal (mise bas : PMB + L1…L6 ; chevreaux : W0, W1… + L1…L6) et sur la page Mensurations.</p>
+  <form method="post" class="row g-2 align-items-end"><?= csrf_field() ?><input type="hidden" name="action" value="mesures">
+    <?php foreach (MESURES as $k): ?><div class="col-6 col-md-4 col-xl-2"><label class="form-label small mb-1" for="m_<?= $k ?>"><?= strtoupper($k) ?></label>
+      <input id="m_<?= $k ?>" name="<?= $k ?>" maxlength="60" class="form-control form-control-sm" value="<?= e(parametre_app($pdo, 'mesure_' . $k, '')) ?>" placeholder="ex. Hauteur au garrot"></div><?php endforeach; ?>
+    <div class="col-6 col-md-2 col-xl-1"><label class="form-label small mb-1" for="m_unite">Unité</label><input id="m_unite" name="unite" maxlength="10" class="form-control form-control-sm" value="<?= e(unite_mesures($pdo)) ?>"></div>
+    <div class="col-auto"><button class="btn btn-sm btn-primary"><i class="bi bi-check"></i> Enregistrer</button></div>
+  </form>
+</div>
+
 <div class="card mt-3" id="indices">
   <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
     <span class="fw-semibold"><i class="bi bi-calculator"></i> Indices de productivité : formules et interprétation</span>

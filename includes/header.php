@@ -20,6 +20,7 @@
         <li class="nav-item"><a class="nav-link <?= in_array($page,['animaux','animal','animal_form'])?'active':'' ?>" href="animaux.php"><i class="bi bi-list-ul"></i> Animaux</a></li>
         <li class="nav-item"><a class="nav-link <?= $page==='lait'?'active':'' ?>" href="lait.php"><i class="bi bi-droplet"></i> Production laitière</a></li>
         <li class="nav-item"><a class="nav-link <?= $page==='pesees'?'active':'' ?>" href="pesees.php"><i class="bi bi-speedometer"></i> Pesées</a></li>
+        <li class="nav-item"><a class="nav-link <?= $page==='mensurations'?'active':'' ?>" href="mensurations.php"><i class="bi bi-rulers"></i> Mensurations</a></li>
         <li class="nav-item"><a class="nav-link <?= in_array($page,['indices','indice_form'])?'active':'' ?>" href="indices.php"><i class="bi bi-calculator"></i> Indices</a></li>
         <?php if (a_role('admin')): ?>
         <li class="nav-item"><a class="nav-link <?= $page==='parametres'?'active':'' ?>" href="parametres.php"><i class="bi bi-gear"></i> Paramètres</a></li>

@@ -69,6 +69,9 @@ const SEUIL_CELLULES = 300;
 /** Moteur des indices paramétrables */
 require_once __DIR__ . '/indices.php';
 
+/** Mensurations (PMB, W0…Wn, L1…L6) */
+require_once __DIR__ . '/mensurations.php';
+
 /** Authentification : toute page exige une connexion (sauf PAGE_PUBLIQUE) */
 require_once __DIR__ . '/auth.php';
 controle_acces($pdo);

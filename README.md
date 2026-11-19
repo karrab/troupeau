@@ -10,8 +10,8 @@ Application PHP 8 / MySQL / Bootstrap 5 pour bovins, ovins et caprins.
 5. Ouvrir `http://localhost/troupeau/` : à la première visite, la page de connexion propose de **créer le compte administrateur**
    (aucun mot de passe n'est fourni par défaut).
 
-Base déjà installée : sélectionner la base dans phpMyAdmin, puis importer dans l'ordre `migrations/001_indices.sql`
-et `migrations/002_utilisateurs.sql` (chacune peut être réimportée sans risque).
+Base déjà installée : sélectionner la base dans phpMyAdmin, puis importer dans l'ordre `migrations/001_indices.sql`,
+`migrations/002_utilisateurs.sql` et `migrations/003_mensurations.sql` (chacune peut être réimportée sans risque).
 
 ## Modules
 | Page | Rôle |
@@ -21,6 +21,7 @@ et `migrations/002_utilisateurs.sql` (chacune peut être réimportée sans risqu
 | `animal.php` | **Fiche animal** : identité, généalogie, descendance, poids + GMQ, contrôle laitier, reproduction, santé, mouvements, impression |
 | `animal_form.php` | Création / modification / photo / sortie (vente, mort, réforme) |
 | `lait.php` | Synthèse mensuelle et classement des laitières |
+| `mensurations.php` | Séance de mensuration d'un lot de chevreaux au stade W0, W1, W2… et tableau de suivi par stade |
 | `pesees.php` | Séance de pesée groupée par lot |
 | `indices.php` | **Indices de productivité** par famille (R, L, C, S, P), par campagne / lactation / contrôle et par animal, lot, espèce, troupeau ; évolution, export CSV |
 | `indice_form.php` | Création / modification d'un indice : formule, période, seuils d'interprétation par espèce, test de la formule |
@@ -38,6 +39,15 @@ et `migrations/002_utilisateurs.sql` (chacune peut être réimportée sans risqu
 - **Délais d'attente** lait/viande en cours, affichés sur la fiche et le tableau de bord.
 - **Alerte cellules** au-delà de 300 000/mL (`SEUIL_CELLULES` dans `includes/functions.php`).
 - Mouvements d'entrée, de transfert et de sortie tracés automatiquement.
+
+## Mensurations
+- **À la mise bas (mère)** : PMB (poids à la mise bas) + L1 à L6. Saisie directement avec la mise bas (onglet Reproduction)
+  ou plus tard dans l'onglet **Mensurations** de la fiche, rattachée à la mise bas concernée.
+- **Chevreaux** : stades **W0, W1, W2, W3, W4…** (sans limite), chacun avec la date, le poids et L1 à L6.
+  Saisie sur la fiche (onglet Mensurations, stade suivant proposé) ou par lot sur la page **Mensurations**.
+- La signification et l'unité de L1 à L6 se règlent dans **Paramètres › Mensurations**.
+- Le poids (PMB ou Wn) est aussi enregistré comme pesée : il compte dans le GMQ, le poids au sevrage et les indices.
+  Supprimer la mensuration supprime cette pesée.
 
 ## Indices de productivité
 Les 25 indices de la spécification sont **calculés automatiquement** à partir des événements enregistrés (jamais saisis),

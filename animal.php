@@ -87,6 +87,15 @@ foreach ($soins as $so) {
     if ($so['delai_attente_viande'] && $fv >= date('Y-m-d') && $fv > (string)$attenteViande) $attenteViande = $fv;
 }
 
+// ---------- Mensurations ----------
+$libsMes = libelles_mesures($pdo); $uniteMes = unite_mesures($pdo);
+$mensMB = lignes($pdo, "SELECT m.*, r.date_evenement date_mb, r.nb_petits FROM mensurations m LEFT JOIN reproductions r ON r.id=m.reproduction_id
+    WHERE m.animal_id=? AND m.type='mise_bas' ORDER BY m.date_mesure DESC", $id);
+$mensW = lignes($pdo, "SELECT * FROM mensurations WHERE animal_id=? AND type='croissance' ORDER BY stade", $id);
+$mbSansMesure = array_values(array_filter($misesBas, fn($r) => !in_array($r['id'], array_column($mensMB, 'reproduction_id'))));
+$stadeSuivant = $mensW ? max(array_column($mensW, 'stade')) + 1 : 0;
+$jeune = !$a['date_naissance'] || jours_entre($a['date_naissance'], date('Y-m-d')) < 365;
+
 $alims = lignes($pdo, 'SELECT * FROM alimentation WHERE animal_id=? ORDER BY date_distribution DESC, id DESC', $id);
 
 // ---------- Indices enregistrés pour cet animal (par campagne, par lactation) ----------
@@ -154,6 +163,7 @@ $del = function (string $type, int $rid) use ($id) {
   <?php endif; ?>
   <li class="nav-item"><button class="nav-link <?= $active('sante') ?>" data-bs-toggle="tab" data-bs-target="#sante"><i class="bi bi-capsule"></i> Santé <span class="badge text-bg-light"><?= count($soins) ?></span></button></li>
   <li class="nav-item"><button class="nav-link <?= $active('mvt') ?>" data-bs-toggle="tab" data-bs-target="#mvt"><i class="bi bi-arrow-left-right"></i> Mouvements</button></li>
+  <li class="nav-item"><button class="nav-link <?= $active('mens') ?>" data-bs-toggle="tab" data-bs-target="#mens"><i class="bi bi-rulers"></i> Mensurations <span class="badge text-bg-light"><?= count($mensMB) + count($mensW) ?></span></button></li>
   <li class="nav-item"><button class="nav-link <?= $active('alim') ?>" data-bs-toggle="tab" data-bs-target="#alim"><i class="bi bi-basket"></i> Alimentation <span class="badge text-bg-light"><?= count($alims) ?></span></button></li>
   <li class="nav-item"><button class="nav-link <?= $active('indices') ?>" data-bs-toggle="tab" data-bs-target="#indices"><i class="bi bi-calculator"></i> Indices <span class="badge text-bg-light"><?= count($indCamp) + count($colsLact) ?></span></button></li>
 </ul>
@@ -301,6 +311,9 @@ $del = function (string $type, int $rid) use ($id) {
             <div class="col-6 r r-diagnostic"><label class="form-label small">Résultat</label><select name="resultat" class="form-select form-select-sm"><option value="">—</option><option value="positif">Positif</option><option value="negatif">Négatif</option></select></div>
             <div class="col-6 r r-mise_bas"><label class="form-label small">Nombre de petits nés</label><input type="number" min="0" max="10" name="nb_petits" class="form-control form-control-sm" value="1"></div>
             <div class="col-6 r r-mise_bas"><label class="form-label small">Dont mort-nés</label><input type="number" min="0" max="10" name="nb_morts_nes" class="form-control form-control-sm" value="0"></div>
+            <div class="col-12 r r-mise_bas"><div class="small fw-semibold mt-1">Mensuration de la mère <span class="text-muted fw-normal">(facultatif)</span></div></div>
+            <div class="col-4 r r-mise_bas"><label class="form-label small">PMB (kg)</label><input type="number" step="0.1" min="0" name="mb_poids" class="form-control form-control-sm"></div>
+            <?php foreach ($libsMes as $k => $lib): ?><div class="col-4 r r-mise_bas"><label class="form-label small text-truncate d-block" title="<?= e($lib) ?>"><?= e($lib) ?></label><input type="number" step="0.1" min="0" name="mb_<?= $k ?>" class="form-control form-control-sm" placeholder="<?= e($uniteMes) ?>"></div><?php endforeach; ?>
             <div class="col-6"><label class="form-label small">Intervenant</label><input name="intervenant" class="form-control form-control-sm"></div>
             <div class="col-12"><input name="observations" class="form-control form-control-sm" placeholder="Observations"></div>
             <div class="col-12 small text-muted r r-saillie r-insemination">La mise bas prévue est calculée automatiquement (<?= (int)$a['gestation_jours'] ?> j de gestation).</div>
@@ -379,6 +392,81 @@ $del = function (string $type, int $rid) use ($id) {
     </div>
   </div>
 
+  <!-- ================= MENSURATIONS ================= -->
+  <div class="tab-pane fade <?= $show('mens') ?>" id="mens">
+    <?php $colsMes = fn() => implode('', array_map(fn($l) => '<th class="text-end small" title="' . e($l) . '">' . e(explode(' – ', $l)[0]) . '</th>', $libsMes)); ?>
+    <?php if ($a['sexe'] === 'F' && ($misesBas || $mensMB)): ?>
+    <h3 class="h6">À la mise bas <span class="text-muted fw-normal small">PMB et L1 à L6 (<?= e($uniteMes) ?>)</span></h3>
+    <div class="row g-3 mb-4">
+      <div class="col-lg-8"><div class="table-responsive"><table class="table table-sm align-middle">
+        <thead><tr><th>Mise bas</th><th class="text-end">Petits</th><th class="text-end">PMB</th><?= $colsMes() ?><th></th></tr></thead>
+        <tbody><?php foreach ($mensMB as $m): ?>
+          <tr><td><?= dfr($m['date_mb'] ?? $m['date_mesure']) ?></td><td class="text-end"><?= $m['nb_petits'] ?? '—' ?></td>
+            <td class="text-end fw-semibold"><?= $m['poids'] !== null ? nfr($m['poids']) . ' kg' : '—' ?></td>
+            <?php foreach (MESURES as $k): ?><td class="text-end"><?= nfr($m[$k]) ?></td><?php endforeach; ?>
+            <td class="text-end no-print"><?= $del('mens', $m['id']) ?></td></tr>
+        <?php endforeach; if (!$mensMB): ?><tr><td colspan="9" class="text-muted text-center">Aucune mensuration de mise bas.</td></tr><?php endif; ?></tbody>
+      </table></div></div>
+      <div class="col-lg-4">
+        <?php if ($mbSansMesure): ?>
+        <form method="post" action="actions.php" class="border rounded p-3 bg-light">
+          <?= csrf_field() ?><input type="hidden" name="op" value="add"><input type="hidden" name="type" value="mens"><input type="hidden" name="type_mesure" value="mise_bas"><input type="hidden" name="animal_id" value="<?= $id ?>">
+          <h3 class="h6">Mensuration de mise bas</h3>
+          <div class="row g-2">
+            <div class="col-7"><label class="form-label small">Mise bas</label><select name="reproduction_id" class="form-select form-select-sm">
+              <?php foreach ($mbSansMesure as $r): ?><option value="<?= $r['id'] ?>"><?= dfr($r['date_evenement']) ?> · <?= (int)$r['nb_petits'] ?> petit(s)</option><?php endforeach; ?></select></div>
+            <div class="col-5"><label class="form-label small">PMB (kg)</label><input type="number" step="0.1" min="0" name="poids" class="form-control form-control-sm"></div>
+            <?php foreach ($libsMes as $k => $lib): ?><div class="col-4"><label class="form-label small text-truncate d-block" title="<?= e($lib) ?>"><?= e($lib) ?></label><input type="number" step="0.1" min="0" name="<?= $k ?>" class="form-control form-control-sm" placeholder="<?= e($uniteMes) ?>"></div><?php endforeach; ?>
+            <input type="hidden" name="date_mesure" value="<?= date('Y-m-d') ?>">
+            <div class="col-12"><button class="btn btn-primary btn-sm w-100">Ajouter</button></div>
+          </div>
+        </form>
+        <?php else: ?><p class="small text-muted">Toutes les mises bas enregistrées ont leurs mensurations. Saisissez la PMB directement avec une nouvelle mise bas (onglet Reproduction).</p><?php endif; ?>
+      </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if (!$mensW && !$jeune): ?>
+    <details class="small"><summary class="text-muted">Mensurations de croissance (W0, W1…) : aucune pour cet animal adulte – en ajouter</summary><div class="mt-2">
+    <?php endif; ?>
+    <h3 class="h6">Croissance <span class="text-muted fw-normal small">stades W0, W1, W2… · poids et L1 à L6 (<?= e($uniteMes) ?>)</span></h3>
+    <div class="row g-3">
+      <div class="col-lg-8">
+        <div class="table-responsive"><table class="table table-sm align-middle">
+          <thead><tr><th>Stade</th><th>Date</th><th class="text-end">Âge</th><th class="text-end">Poids</th><th class="text-end">GMQ</th><?= $colsMes() ?><th></th></tr></thead>
+          <tbody><?php $prec = null; foreach ($mensW as $m): $j = $prec ? jours_entre($prec['date_mesure'], $m['date_mesure']) : 0; ?>
+            <tr><td><span class="badge text-bg-success"><?= libelle_stade((int)$m['stade']) ?></span></td><td><?= dfr($m['date_mesure']) ?></td>
+              <td class="text-end text-muted"><?= $a['date_naissance'] ? jours_entre($a['date_naissance'], $m['date_mesure']) . ' j' : '—' ?></td>
+              <td class="text-end fw-semibold"><?= $m['poids'] !== null ? nfr($m['poids']) . ' kg' : '—' ?></td>
+              <td class="text-end"><?= $prec && $j > 0 && $m['poids'] !== null && $prec['poids'] !== null ? round(($m['poids'] - $prec['poids']) / $j * 1000) . ' g/j' : '' ?></td>
+              <?php foreach (MESURES as $k): ?><td class="text-end"><?= nfr($m[$k]) ?></td><?php endforeach; ?>
+              <td class="text-end no-print"><?= $del('mens', $m['id']) ?></td></tr>
+          <?php $prec = $m; endforeach; if (!$mensW): ?><tr><td colspan="12" class="text-muted text-center">Aucune mensuration de croissance.</td></tr><?php endif; ?></tbody>
+        </table></div>
+        <?php if (count($mensW) >= 2): ?><div class="chart-box"><canvas id="chartMens"></canvas></div><?php endif; ?>
+      </div>
+      <div class="col-lg-4">
+        <form method="post" action="actions.php" class="border rounded p-3 bg-light">
+          <?= csrf_field() ?><input type="hidden" name="op" value="add"><input type="hidden" name="type" value="mens"><input type="hidden" name="type_mesure" value="croissance"><input type="hidden" name="animal_id" value="<?= $id ?>">
+          <h3 class="h6">Nouvelle mensuration</h3>
+          <div class="row g-2">
+            <div class="col-4"><label class="form-label small">Stade</label><div class="input-group input-group-sm"><span class="input-group-text">W</span>
+              <input type="number" min="0" max="999" name="stade" class="form-control" value="<?= $stadeSuivant ?>" required></div></div>
+            <div class="col-8"><label class="form-label small">Date</label><input type="date" name="date_mesure" class="form-control form-control-sm" required
+              value="<?= $stadeSuivant === 0 && $a['date_naissance'] ? e($a['date_naissance']) : date('Y-m-d') ?>"></div>
+            <div class="col-4"><label class="form-label small">Poids (kg)</label><input type="number" step="0.01" min="0" name="poids" class="form-control form-control-sm"
+              value="<?= $stadeSuivant === 0 && $a['poids_naissance'] ? e($a['poids_naissance']) : '' ?>"></div>
+            <?php foreach ($libsMes as $k => $lib): ?><div class="col-4"><label class="form-label small text-truncate d-block" title="<?= e($lib) ?>"><?= e($lib) ?></label><input type="number" step="0.1" min="0" name="<?= $k ?>" class="form-control form-control-sm" placeholder="<?= e($uniteMes) ?>"></div><?php endforeach; ?>
+            <div class="col-8"><input name="observations" class="form-control form-control-sm" placeholder="Observations"></div>
+            <div class="col-12"><button class="btn btn-primary btn-sm w-100">Ajouter</button></div>
+          </div>
+        </form>
+        <p class="small text-muted mt-2">Le poids saisi est aussi enregistré comme pesée (GMQ, sevrage, indices). Séance pour tout un lot : <a href="mensurations.php">Mensurations</a>.</p>
+      </div>
+    </div>
+    <?php if (!$mensW && !$jeune): ?></div></details><?php endif; ?>
+  </div>
+
   <!-- ================= ALIMENTATION ================= -->
   <div class="tab-pane fade <?= $show('alim') ?>" id="alim">
     <div class="row g-3">
@@ -443,8 +531,15 @@ $del = function (string $type, int $rid) use ($id) {
 <?php
 $jsPoids = json_encode(array_map(fn($p) => ['x' => $p['date_pesee'], 'y' => (float)$p['poids']], $pesees));
 $jsLait  = json_encode(array_map(fn($c) => ['d' => dfr($c['date_controle']), 'q' => (float)$c['quantite_totale'], 'tb' => $c['taux_butyreux'] !== null ? (float)$c['taux_butyreux'] : null, 'tp' => $c['taux_proteique'] !== null ? (float)$c['taux_proteique'] : null], $laits));
+$jsMens = json_encode(['stades' => array_map(fn($m) => libelle_stade((int)$m['stade']), $mensW), 'poids' => array_map(fn($m) => $m['poids'] === null ? null : (float)$m['poids'], $mensW),
+    'mesures' => array_map(fn($k) => ['label' => $libsMes[$k], 'data' => array_map(fn($m) => $m[$k] === null ? null : (float)$m[$k], $mensW)], MESURES)]);
 $scripts = <<<JS
 <script>
+const M = $jsMens;
+if (document.getElementById('chartMens')) new Chart(chartMens, {data:{labels:M.stades,datasets:[
+  {type:'bar',label:'Poids (kg)',data:M.poids,backgroundColor:'rgba(46,125,79,.25)',yAxisID:'y2'},
+  ...M.mesures.filter(x => x.data.some(v => v !== null)).map((x, i) => ({type:'line',label:x.label,data:x.data,tension:.3,borderColor:['#1f5130','#b03a2e','#e0a100','#2b6cb0','#7b4fa0','#6c757d'][i]}))]},
+  options:{maintainAspectRatio:false,scales:{y:{title:{display:true,text:'mesures'}},y2:{position:'right',beginAtZero:true,grid:{drawOnChartArea:false},title:{display:true,text:'kg'}}}}});
 const P = $jsPoids, L = $jsLait;
 if (document.getElementById('chartPoids') && P.length) new Chart(chartPoids, {type:'line',
   data:{labels:P.map(p=>new Date(p.x).toLocaleDateString('fr-FR')),datasets:[{label:'Poids (kg)',data:P.map(p=>p.y),borderColor:'#1f5130',backgroundColor:'rgba(46,125,79,.12)',fill:true,tension:.3}]},
