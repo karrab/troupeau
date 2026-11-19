@@ -146,8 +146,9 @@ INSERT INTO indices (id, code, nom, famille, description, formule, unite, decima
  (22,'S03','Taux de réforme','sante','(Animaux réformés ÷ effectif) × 100','reforme / nb_animaux * 100','%',1,'campagne','lot,espece,troupeau','ratio','cible','Renouvellement du troupeau',NULL,NULL,220),
  (23,'P01','Productivité numérique','globale','Nb de chevreaux sevrés par femelle et par an','petits_sevres / reproductrice','chevreaux/femelle/an',2,'campagne','animal,lot,espece,troupeau','ratio','haut','Indice synthétique majeur',NULL,'F',230),
  (24,'P02','Productivité pondérale','globale','kg de chevreaux sevrés par femelle et par an','poids_petits_sevres / reproductrice','kg/femelle/an',1,'campagne','animal,lot,espece,troupeau','ratio','haut','Intègre prolificité + survie + croissance',NULL,'F',240),
- (25,'P03','Score global de productivité','globale','Note pondérée 0–100 (femelles ayant mis bas) : lait 35 %, prolificité 25 %, survie 20 %, croissance des petits 20 %','si(nb_mises_bas > 0, moyenne_ponderee(note(lait_moyen, 1, 4), 35, note(R04, 1, 2), 25, note(S02, 70, 100), 20, note(gmq_petits, 80, 200), 20))','score 0–100',0,'campagne','animal,lot,espece,troupeau','moyenne','haut','Classement / sélection / réforme',3,'F',250);
+ (25,'P03','Score global de productivité','globale','Note pondérée 0–100 (femelles ayant mis bas) : lait 35 %, prolificité 25 %, survie 20 %, croissance des petits 20 %','si(nb_mises_bas > 0, moyenne_ponderee(note(lait_moyen, 1, 4), 35, note(R04, 1, 2), 25, note(S02, 70, 100), 20, note(gmq_petits, 80, 200), 20))','score 0–100',0,'campagne','animal,lot,espece,troupeau','moyenne','haut','Classement / sélection / réforme',(SELECT id FROM especes WHERE nom LIKE 'caprin%' OR nom LIKE 'chevre%' OR nom LIKE 'chèvre%' ORDER BY id LIMIT 1),'F',250);
 
+-- Seuils généraux
 INSERT INTO indices_interpretations (indice_id, espece_id, borne_min, borne_max, libelle, couleur, ordre) VALUES
  (1,NULL,NULL,70,'Faible','danger',1),
  (1,NULL,70,85,'Moyen','warning',2),
@@ -158,12 +159,6 @@ INSERT INTO indices_interpretations (indice_id, espece_id, borne_min, borne_max,
  (3,NULL,NULL,70,'Faible','danger',1),
  (3,NULL,70,90,'Moyen','warning',2),
  (3,NULL,90,NULL,'Bon','success',3),
- (4,3,NULL,1.2,'Faible','danger',1),
- (4,3,1.2,1.6,'Moyenne','warning',2),
- (4,3,1.6,NULL,'Élevée','success',3),
- (4,2,NULL,1.2,'Faible','danger',4),
- (4,2,1.2,1.6,'Moyenne','warning',5),
- (4,2,1.6,NULL,'Élevée','success',6),
  (5,NULL,NULL,1.5,'Très efficace','success',1),
  (5,NULL,1.5,2,'Moyen','warning',2),
  (5,NULL,2,NULL,'Peu efficace','danger',3),
@@ -176,61 +171,16 @@ INSERT INTO indices_interpretations (indice_id, espece_id, borne_min, borne_max,
  (8,NULL,NULL,30,'Faible','warning',1),
  (8,NULL,30,60,'Moyen','info',2),
  (8,NULL,60,NULL,'Élevé','success',3),
- (9,3,NULL,15,'Précoce','success',1),
- (9,3,15,20,'Moyen','warning',2),
- (9,3,20,NULL,'Tardif','danger',3),
- (9,2,NULL,15,'Précoce','success',4),
- (9,2,15,20,'Moyen','warning',5),
- (9,2,20,NULL,'Tardif','danger',6),
- (9,1,NULL,26,'Précoce','success',7),
- (9,1,26,32,'Moyen','warning',8),
- (9,1,32,NULL,'Tardif','danger',9),
  (10,NULL,NULL,240,'Très court','warning',1),
  (10,NULL,240,360,'Bon rythme','success',2),
  (10,NULL,360,420,'Allongé','warning',3),
  (10,NULL,420,NULL,'Trop long','danger',4),
- (10,1,NULL,380,'Bon rythme','success',5),
- (10,1,380,420,'Allongé','warning',6),
- (10,1,420,NULL,'Trop long','danger',7),
- (11,3,NULL,2,'Faible','danger',1),
- (11,3,2,3.5,'Moyen','warning',2),
- (11,3,3.5,NULL,'Bon','success',3),
- (11,1,NULL,15,'Faible','danger',4),
- (11,1,15,25,'Moyen','warning',5),
- (11,1,25,NULL,'Bon','success',6),
- (14,3,NULL,2,'Faible','danger',1),
- (14,3,2,3.5,'Moyen','warning',2),
- (14,3,3.5,NULL,'Bon','success',3),
- (14,1,NULL,15,'Faible','danger',4),
- (14,1,15,25,'Moyen','warning',5),
- (14,1,25,NULL,'Bon','success',6),
- (12,3,NULL,500,'Faible','danger',1),
- (12,3,500,800,'Moyen','warning',2),
- (12,3,800,NULL,'Bon','success',3),
- (12,1,NULL,5000,'Faible','danger',4),
- (12,1,5000,8000,'Moyen','warning',5),
- (12,1,8000,NULL,'Bon','success',6),
- (13,3,NULL,210,'Courte','danger',1),
- (13,3,210,270,'Moyenne','warning',2),
- (13,3,270,NULL,'Longue','success',3),
- (13,1,NULL,250,'Courte','danger',4),
- (13,1,250,305,'Moyenne','warning',5),
- (13,1,305,NULL,'Longue','success',6),
  (15,NULL,NULL,40,'Chute rapide','danger',1),
  (15,NULL,40,60,'Moyenne','warning',2),
  (15,NULL,60,NULL,'Régulière','success',3),
  (16,NULL,NULL,100,'Faible','danger',1),
  (16,NULL,100,150,'Moyen','warning',2),
  (16,NULL,150,NULL,'Bon','success',3),
- (16,1,NULL,600,'Faible','danger',4),
- (16,1,600,900,'Moyen','warning',5),
- (16,1,900,NULL,'Bon','success',6),
- (17,3,NULL,12,'Faible','danger',1),
- (17,3,12,15,'Moyen','warning',2),
- (17,3,15,NULL,'Bon','success',3),
- (17,1,NULL,90,'Faible','danger',4),
- (17,1,90,110,'Moyen','warning',5),
- (17,1,110,NULL,'Bon','success',6),
  (18,NULL,NULL,4,'Efficace','success',1),
  (18,NULL,4,6,'Moyen','warning',2),
  (18,NULL,6,NULL,'Peu efficace','danger',3),
@@ -246,13 +196,85 @@ INSERT INTO indices_interpretations (indice_id, espece_id, borne_min, borne_max,
  (23,NULL,NULL,1.2,'Faible','danger',1),
  (23,NULL,1.2,1.6,'Moyen','warning',2),
  (23,NULL,1.6,NULL,'Bon','success',3),
- (23,1,NULL,0.8,'Faible','danger',4),
- (23,1,0.8,0.9,'Moyen','warning',5),
- (23,1,0.9,NULL,'Bon','success',6),
- (24,3,NULL,15,'Faible','danger',1),
- (24,3,15,25,'Moyen','warning',2),
- (24,3,25,NULL,'Bon','success',3),
  (25,NULL,NULL,40,'À réformer','danger',1),
  (25,NULL,40,60,'Moyenne','warning',2),
  (25,NULL,60,80,'Bonne','info',3),
  (25,NULL,80,NULL,'Élite – sélection','success',4);
+
+-- Seuils propres aux caprins (ignorés si l'espèce n'existe pas dans la base)
+INSERT INTO indices_interpretations (indice_id, espece_id, borne_min, borne_max, libelle, couleur, ordre)
+SELECT v.i, e.id, v.mn, v.mx, v.lib, v.col, v.o
+FROM (SELECT id FROM especes WHERE nom LIKE 'caprin%' OR nom LIKE 'chevre%' OR nom LIKE 'chèvre%' ORDER BY id LIMIT 1) e
+CROSS JOIN (
+  SELECT 4 i, NULL mn, 1.2 mx, 'Faible' lib, 'danger' col, 1 o
+  UNION ALL SELECT 4 i, 1.2 mn, 1.6 mx, 'Moyenne' lib, 'warning' col, 2 o
+  UNION ALL SELECT 4 i, 1.6 mn, NULL mx, 'Élevée' lib, 'success' col, 3 o
+  UNION ALL SELECT 9 i, NULL mn, 15 mx, 'Précoce' lib, 'success' col, 1 o
+  UNION ALL SELECT 9 i, 15 mn, 20 mx, 'Moyen' lib, 'warning' col, 2 o
+  UNION ALL SELECT 9 i, 20 mn, NULL mx, 'Tardif' lib, 'danger' col, 3 o
+  UNION ALL SELECT 11 i, NULL mn, 2 mx, 'Faible' lib, 'danger' col, 1 o
+  UNION ALL SELECT 11 i, 2 mn, 3.5 mx, 'Moyen' lib, 'warning' col, 2 o
+  UNION ALL SELECT 11 i, 3.5 mn, NULL mx, 'Bon' lib, 'success' col, 3 o
+  UNION ALL SELECT 14 i, NULL mn, 2 mx, 'Faible' lib, 'danger' col, 1 o
+  UNION ALL SELECT 14 i, 2 mn, 3.5 mx, 'Moyen' lib, 'warning' col, 2 o
+  UNION ALL SELECT 14 i, 3.5 mn, NULL mx, 'Bon' lib, 'success' col, 3 o
+  UNION ALL SELECT 12 i, NULL mn, 500 mx, 'Faible' lib, 'danger' col, 1 o
+  UNION ALL SELECT 12 i, 500 mn, 800 mx, 'Moyen' lib, 'warning' col, 2 o
+  UNION ALL SELECT 12 i, 800 mn, NULL mx, 'Bon' lib, 'success' col, 3 o
+  UNION ALL SELECT 13 i, NULL mn, 210 mx, 'Courte' lib, 'danger' col, 1 o
+  UNION ALL SELECT 13 i, 210 mn, 270 mx, 'Moyenne' lib, 'warning' col, 2 o
+  UNION ALL SELECT 13 i, 270 mn, NULL mx, 'Longue' lib, 'success' col, 3 o
+  UNION ALL SELECT 17 i, NULL mn, 12 mx, 'Faible' lib, 'danger' col, 1 o
+  UNION ALL SELECT 17 i, 12 mn, 15 mx, 'Moyen' lib, 'warning' col, 2 o
+  UNION ALL SELECT 17 i, 15 mn, NULL mx, 'Bon' lib, 'success' col, 3 o
+  UNION ALL SELECT 24 i, NULL mn, 15 mx, 'Faible' lib, 'danger' col, 1 o
+  UNION ALL SELECT 24 i, 15 mn, 25 mx, 'Moyen' lib, 'warning' col, 2 o
+  UNION ALL SELECT 24 i, 25 mn, NULL mx, 'Bon' lib, 'success' col, 3 o
+) v;
+
+-- Seuils propres aux ovins (ignorés si l'espèce n'existe pas dans la base)
+INSERT INTO indices_interpretations (indice_id, espece_id, borne_min, borne_max, libelle, couleur, ordre)
+SELECT v.i, e.id, v.mn, v.mx, v.lib, v.col, v.o
+FROM (SELECT id FROM especes WHERE nom LIKE 'ovin%' OR nom LIKE 'mouton%' OR nom LIKE 'brebis%' ORDER BY id LIMIT 1) e
+CROSS JOIN (
+  SELECT 4 i, NULL mn, 1.2 mx, 'Faible' lib, 'danger' col, 4 o
+  UNION ALL SELECT 4 i, 1.2 mn, 1.6 mx, 'Moyenne' lib, 'warning' col, 5 o
+  UNION ALL SELECT 4 i, 1.6 mn, NULL mx, 'Élevée' lib, 'success' col, 6 o
+  UNION ALL SELECT 9 i, NULL mn, 15 mx, 'Précoce' lib, 'success' col, 4 o
+  UNION ALL SELECT 9 i, 15 mn, 20 mx, 'Moyen' lib, 'warning' col, 5 o
+  UNION ALL SELECT 9 i, 20 mn, NULL mx, 'Tardif' lib, 'danger' col, 6 o
+) v;
+
+-- Seuils propres aux bovins (ignorés si l'espèce n'existe pas dans la base)
+INSERT INTO indices_interpretations (indice_id, espece_id, borne_min, borne_max, libelle, couleur, ordre)
+SELECT v.i, e.id, v.mn, v.mx, v.lib, v.col, v.o
+FROM (SELECT id FROM especes WHERE nom LIKE 'bovin%' OR nom LIKE 'vache%' ORDER BY id LIMIT 1) e
+CROSS JOIN (
+  SELECT 9 i, NULL mn, 26 mx, 'Précoce' lib, 'success' col, 7 o
+  UNION ALL SELECT 9 i, 26 mn, 32 mx, 'Moyen' lib, 'warning' col, 8 o
+  UNION ALL SELECT 9 i, 32 mn, NULL mx, 'Tardif' lib, 'danger' col, 9 o
+  UNION ALL SELECT 10 i, NULL mn, 380 mx, 'Bon rythme' lib, 'success' col, 5 o
+  UNION ALL SELECT 10 i, 380 mn, 420 mx, 'Allongé' lib, 'warning' col, 6 o
+  UNION ALL SELECT 10 i, 420 mn, NULL mx, 'Trop long' lib, 'danger' col, 7 o
+  UNION ALL SELECT 11 i, NULL mn, 15 mx, 'Faible' lib, 'danger' col, 4 o
+  UNION ALL SELECT 11 i, 15 mn, 25 mx, 'Moyen' lib, 'warning' col, 5 o
+  UNION ALL SELECT 11 i, 25 mn, NULL mx, 'Bon' lib, 'success' col, 6 o
+  UNION ALL SELECT 14 i, NULL mn, 15 mx, 'Faible' lib, 'danger' col, 4 o
+  UNION ALL SELECT 14 i, 15 mn, 25 mx, 'Moyen' lib, 'warning' col, 5 o
+  UNION ALL SELECT 14 i, 25 mn, NULL mx, 'Bon' lib, 'success' col, 6 o
+  UNION ALL SELECT 12 i, NULL mn, 5000 mx, 'Faible' lib, 'danger' col, 4 o
+  UNION ALL SELECT 12 i, 5000 mn, 8000 mx, 'Moyen' lib, 'warning' col, 5 o
+  UNION ALL SELECT 12 i, 8000 mn, NULL mx, 'Bon' lib, 'success' col, 6 o
+  UNION ALL SELECT 13 i, NULL mn, 250 mx, 'Courte' lib, 'danger' col, 4 o
+  UNION ALL SELECT 13 i, 250 mn, 305 mx, 'Moyenne' lib, 'warning' col, 5 o
+  UNION ALL SELECT 13 i, 305 mn, NULL mx, 'Longue' lib, 'success' col, 6 o
+  UNION ALL SELECT 16 i, NULL mn, 600 mx, 'Faible' lib, 'danger' col, 4 o
+  UNION ALL SELECT 16 i, 600 mn, 900 mx, 'Moyen' lib, 'warning' col, 5 o
+  UNION ALL SELECT 16 i, 900 mn, NULL mx, 'Bon' lib, 'success' col, 6 o
+  UNION ALL SELECT 17 i, NULL mn, 90 mx, 'Faible' lib, 'danger' col, 4 o
+  UNION ALL SELECT 17 i, 90 mn, 110 mx, 'Moyen' lib, 'warning' col, 5 o
+  UNION ALL SELECT 17 i, 110 mn, NULL mx, 'Bon' lib, 'success' col, 6 o
+  UNION ALL SELECT 23 i, NULL mn, 0.8 mx, 'Faible' lib, 'danger' col, 4 o
+  UNION ALL SELECT 23 i, 0.8 mn, 0.9 mx, 'Moyen' lib, 'warning' col, 5 o
+  UNION ALL SELECT 23 i, 0.9 mn, NULL mx, 'Bon' lib, 'success' col, 6 o
+) v;

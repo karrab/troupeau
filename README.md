@@ -67,7 +67,8 @@ Règles de calcul à connaître :
 Données ajoutées pour ces indices : date et poids de **sevrage** (fiche animal), **mort-nés** (mise bas), onglet **Alimentation**
 (aliment distribué), lots de type *pâturage* pour les jours de parcours.
 
-**Base existante** : importer `migrations/001_indices.sql` (ajoute les colonnes et tables, remplace les définitions d'indices ;
+**Base existante** : sélectionner la base puis importer `migrations/001_indices.sql` (ajoute les colonnes et tables, remplace les définitions d'indices ;
+les espèces sont reconnues par leur nom – Bovin/Vache, Ovin/Mouton/Brebis, Caprin/Chèvre – quels que soient leurs identifiants ;
 les résultats sont recalculés au premier affichage de la page Indices).
 
 ## Sécurité
