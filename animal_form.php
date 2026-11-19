@@ -26,6 +26,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (isset($_POST['supprimer']) && $id) {
         $pdo->prepare('DELETE FROM animaux WHERE id=?')->execute([$id]);
         if (!empty($a['photo']) && is_file(UPLOAD_DIR . $a['photo'])) unlink(UPLOAD_DIR . $a['photo']);
+        $pdo->prepare("DELETE FROM indices_resultats WHERE niveau='animal' AND cible_id=?")->execute([$id]);
+        maj_indices_auto($pdo, ...array_map(fn($y) => "$y-01-01", annees_indices($pdo)));
         flash('Animal supprimé avec tout son historique.', 'warning');
         redirect('animaux.php');
     }
@@ -89,6 +91,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
             flash('Animal enregistré.');
         }
+        // Lot, statut, dates : les indices de l'année en cours (et de l'année de sortie) sont recalculés
+        maj_indices_auto($pdo, date('Y-m-d'), $d['date_sortie'], $d['date_naissance'] ?? null);
         redirect('animal.php?id=' . $id);
     }
     $a = array_merge($a, $d);

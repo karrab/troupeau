@@ -18,6 +18,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare('DELETE FROM races WHERE id=?')->execute([(int)post('id')]); break;
             case 'del_lot':
                 $pdo->prepare('DELETE FROM lots WHERE id=?')->execute([(int)post('id')]); break;
+            case 'del_indice':
+                $pdo->prepare('DELETE FROM indices WHERE id=?')->execute([(int)post('id')]); break;
+            case 'actif_indice':
+                $pdo->prepare('UPDATE indices SET actif=1-actif, updated_at=NOW() WHERE id=?')->execute([(int)post('id')]);
+                $pdo->prepare('DELETE r FROM indices_resultats r JOIN indices i ON i.id=r.indice_id WHERE i.id=? AND i.actif=0')->execute([(int)post('id')]);
+                maj_indices_auto($pdo, ...array_map(fn($y) => "$y-01-01", annees_indices($pdo)));
+                break;
         }
         flash('Paramètres mis à jour.');
     } catch (PDOException $e) {
@@ -27,6 +34,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $lots = $pdo->query("SELECT l.*, COUNT(a.id) nb FROM lots l LEFT JOIN animaux a ON a.lot_id=l.id AND a.statut='actif' GROUP BY l.id ORDER BY l.nom")->fetchAll();
+$listeIndices = $pdo->query('SELECT i.*, e.nom espece, (SELECT COUNT(*) FROM indices_resultats r WHERE r.indice_id=i.id) nb_res,
+    (SELECT MAX(calcule_le) FROM indices_resultats r WHERE r.indice_id=i.id) calcule_le FROM indices i LEFT JOIN especes e ON e.id=i.espece_id ORDER BY i.ordre, i.nom')->fetchAll();
+$reglesIndices = interpretations_indices($pdo);
 $delBtn = fn($action, $id) => '<form method="post" class="d-inline" onsubmit="return confirm(\'Supprimer ?\')">' . csrf_field()
   . '<input type="hidden" name="action" value="' . $action . '"><input type="hidden" name="id" value="' . $id . '"><button class="btn btn-sm btn-link text-danger p-0"><i class="bi bi-x-circle"></i></button></form>';
 require 'includes/header.php';
@@ -69,5 +79,30 @@ require 'includes/header.php';
       <div class="col-9"><input name="description" class="form-control form-control-sm" placeholder="Description"></div>
       <div class="col-3 d-grid"><button class="btn btn-sm btn-primary"><i class="bi bi-plus"></i></button></div></form>
   </div></div>
+</div>
+<div class="card mt-3" id="indices">
+  <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <span class="fw-semibold"><i class="bi bi-calculator"></i> Indices : formules et interprétation</span>
+    <span><a href="indices.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-table"></i> Résultats</a>
+      <a href="indice_form.php" class="btn btn-sm btn-primary"><i class="bi bi-plus-lg"></i> Nouvel indice</a></span>
+  </div>
+  <div class="table-responsive"><table class="table table-sm table-hover mb-0 align-middle small">
+    <thead><tr><th>Code</th><th>Indice</th><th>Formule</th><th>Appliqué à</th><th>Niveaux</th><th>Interprétation</th><th class="text-end">Résultats</th><th></th></tr></thead>
+    <tbody><?php foreach ($listeIndices as $x): ?>
+      <tr class="<?= $x['actif'] ? '' : 'text-muted' ?>">
+        <td class="font-monospace"><?= e($x['code']) ?></td>
+        <td><a href="indice_form.php?id=<?= $x['id'] ?>" class="fw-semibold"><?= e($x['nom']) ?></a> <?= $x['unite'] ? '<span class="text-muted">(' . e($x['unite']) . ')</span>' : '' ?></td>
+        <td><code><?= e($x['formule']) ?></code></td>
+        <td><?= e($x['espece'] ?? 'Toutes espèces') ?> · <?= ['F' => 'femelles', 'M' => 'mâles'][$x['sexe']] ?? 'deux sexes' ?></td>
+        <td><?= e(implode(', ', array_map(fn($n) => NIVEAUX_INDICES[$n] ?? $n, explode(',', $x['niveaux'])))) ?><br><span class="text-muted"><?= e($x['agregation']) ?></span></td>
+        <td><?php foreach ($reglesIndices[$x['id']] ?? [] as $r): ?><span class="badge text-bg-<?= e($r['couleur']) ?> me-1" title="<?= e(texte_regle($r)) ?>"><?= e($r['libelle']) ?></span><?php endforeach; ?></td>
+        <td class="text-end"><?= $x['nb_res'] ?><?= $x['calcule_le'] && $x['updated_at'] > $x['calcule_le'] ? ' <i class="bi bi-exclamation-triangle-fill text-warning" title="Formule modifiée depuis le dernier calcul"></i>' : '' ?></td>
+        <td class="text-end text-nowrap">
+          <form method="post" class="d-inline"><?= csrf_field() ?><input type="hidden" name="action" value="actif_indice"><input type="hidden" name="id" value="<?= $x['id'] ?>">
+            <button class="btn btn-sm btn-link p-0 me-2" title="<?= $x['actif'] ? 'Désactiver' : 'Activer' ?>"><i class="bi bi-toggle-<?= $x['actif'] ? 'on text-success' : 'off text-muted' ?> fs-5"></i></button></form>
+          <a href="indice_form.php?id=<?= $x['id'] ?>" class="me-2" title="Modifier la formule"><i class="bi bi-pencil"></i></a><?= $delBtn('del_indice', $x['id']) ?></td>
+      </tr>
+    <?php endforeach; if (!$listeIndices): ?><tr><td colspan="8" class="text-center text-muted">Aucun indice défini.</td></tr><?php endif; ?></tbody>
+  </table></div>
 </div>
 <?php require 'includes/footer.php';

@@ -87,6 +87,14 @@ foreach ($soins as $so) {
     if ($so['delai_attente_viande'] && $fv >= date('Y-m-d') && $fv > (string)$attenteViande) $attenteViande = $fv;
 }
 
+// ---------- Indices enregistrés pour cet animal ----------
+$st = $pdo->prepare("SELECT r.*, i.nom, i.unite, i.decimales, i.description, i.formule formule_actuelle, i.ordre FROM indices_resultats r
+    JOIN indices i ON i.id=r.indice_id WHERE r.niveau='animal' AND r.cible_id=? AND i.actif=1 ORDER BY i.ordre, i.nom, r.annee");
+$st->execute([$id]);
+$indAnimal = []; $indAnnees = [];
+foreach ($st->fetchAll() as $r) { $indAnimal[$r['indice_id']]['def'] = $r; $indAnimal[$r['indice_id']]['ans'][$r['annee']] = $r; $indAnnees[$r['annee']] = true; }
+ksort($indAnnees); $indAnnees = array_keys($indAnnees);
+
 require 'includes/header.php';
 $active = fn($t) => $tab === $t ? 'active' : '';
 $show   = fn($t) => $tab === $t ? 'show active' : '';
@@ -136,6 +144,7 @@ $del = function (string $type, int $rid) use ($id) {
   <?php endif; ?>
   <li class="nav-item"><button class="nav-link <?= $active('sante') ?>" data-bs-toggle="tab" data-bs-target="#sante"><i class="bi bi-capsule"></i> Santé <span class="badge text-bg-light"><?= count($soins) ?></span></button></li>
   <li class="nav-item"><button class="nav-link <?= $active('mvt') ?>" data-bs-toggle="tab" data-bs-target="#mvt"><i class="bi bi-arrow-left-right"></i> Mouvements</button></li>
+  <li class="nav-item"><button class="nav-link <?= $active('indices') ?>" data-bs-toggle="tab" data-bs-target="#indices"><i class="bi bi-calculator"></i> Indices <span class="badge text-bg-light"><?= count($indAnimal) ?></span></button></li>
 </ul>
 
 <div class="tab-content card border-top-0 rounded-top-0 p-3">
@@ -355,6 +364,23 @@ $del = function (string $type, int $rid) use ($id) {
         <p class="small text-muted mt-2">Pour une vente, une mort ou une réforme, changez le statut dans <a href="animal_form.php?id=<?= $id ?>">Modifier</a> : la sortie est enregistrée automatiquement.</p>
       </div>
     </div>
+  </div>
+
+  <!-- ================= INDICES ================= -->
+  <div class="tab-pane fade <?= $show('indices') ?>" id="indices">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+      <h3 class="h6 mb-0">Indices calculés par année</h3>
+      <a href="parametres.php#indices" class="small no-print"><i class="bi bi-sliders"></i> Modifier les formules</a>
+    </div>
+    <?php if ($indAnimal): ?>
+    <div class="table-responsive"><table class="table table-sm align-middle">
+      <thead><tr><th>Indice</th><?php foreach ($indAnnees as $y): ?><th class="text-center"><?= $y ?></th><?php endforeach; ?></tr></thead>
+      <tbody><?php foreach ($indAnimal as $x): $def = $x['def']; ?>
+        <tr><td><span class="fw-semibold"><?= e($def['nom']) ?></span><br><code class="small" title="<?= e($def['description']) ?>"><?= e($def['formule_actuelle']) ?></code></td>
+          <?php foreach ($indAnnees as $y): ?><td class="text-center"><?= cellule_indice($def, $x['ans'][$y] ?? null) ?></td><?php endforeach; ?></tr>
+      <?php endforeach; ?></tbody>
+    </table></div>
+    <?php else: ?><p class="text-muted small">Aucun indice enregistré pour cet animal. Les indices sont recalculés automatiquement à chaque saisie, ou depuis la page <a href="indices.php">Indices</a>.</p><?php endif; ?>
   </div>
 </div>
 <?php

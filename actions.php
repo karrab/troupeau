@@ -18,8 +18,13 @@ $st->execute([$animalId]);
 $animal = $st->fetch() ?: redirect('animaux.php');
 
 // ---------- Suppression ----------
+$colDate = ['pesee' => 'date_pesee', 'lait' => 'date_controle', 'repro' => 'date_evenement', 'sante' => 'date_intervention', 'mvt' => 'date_mouvement'][$type];
 if ($op === 'del') {
+    $d = $pdo->prepare("SELECT $colDate FROM $table WHERE id=? AND animal_id=?");
+    $d->execute([(int)$_POST['id'], $animalId]);
+    $dateLigne = $d->fetchColumn() ?: null;
     $pdo->prepare("DELETE FROM $table WHERE id=? AND animal_id=?")->execute([(int)$_POST['id'], $animalId]);
+    maj_indices_auto($pdo, $dateLigne);
     flash('Ligne supprimée.', 'warning');
     redirect($retour);
 }
@@ -57,7 +62,7 @@ try {
                     $t === 'mise_bas' ? post('nb_petits') : null,
                     $prevue, post('intervenant'), post('observations')]);
             flash(TYPES_REPRO[$t] . ' enregistrée.' . ($prevue ? ' Mise bas prévue le ' . dfr($prevue) . '.' : ''));
-            if ($t === 'mise_bas') { flash('Mise bas enregistrée. Créez maintenant la fiche du petit.'); redirect("animal_form.php?mere=$animalId"); }
+            if ($t === 'mise_bas') { maj_indices_auto($pdo, $date); flash('Mise bas enregistrée. Créez maintenant la fiche du petit.'); redirect("animal_form.php?mere=$animalId"); }
             break;
 
         case 'sante':
@@ -80,6 +85,8 @@ try {
             flash('Transfert enregistré.');
             break;
     }
+    // Indices de l'année concernée recalculés et enregistrés automatiquement
+    maj_indices_auto($pdo, post($colDate), $type === 'mvt' ? date('Y-m-d') : null);
 } catch (InvalidArgumentException $e) {
     flash($e->getMessage(), 'danger');
 } catch (PDOException $e) {

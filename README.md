@@ -18,7 +18,9 @@ Application PHP 8 / MySQL / Bootstrap 5 pour bovins, ovins et caprins.
 | `animal_form.php` | Création / modification / photo / sortie (vente, mort, réforme) |
 | `lait.php` | Synthèse mensuelle et classement des laitières |
 | `pesees.php` | Séance de pesée groupée par lot |
-| `parametres.php` | Espèces (durée de gestation), races, lots |
+| `indices.php` | **Indices** : résultats enregistrés par année et par animal / lot / espèce / troupeau, interprétation, évolution pluriannuelle, export CSV |
+| `indice_form.php` | Création / modification d'un indice : formule, seuils d'interprétation, champ d'application, test de la formule |
+| `parametres.php` | Espèces (durée de gestation), races, lots, **liste des indices et de leurs formules** |
 | `actions.php` | Enregistrement / suppression de l'historique |
 
 ## Calculs automatiques
@@ -30,6 +32,23 @@ Application PHP 8 / MySQL / Bootstrap 5 pour bovins, ovins et caprins.
 - **Alerte cellules** au-delà de 300 000/mL (`SEUIL_CELLULES` dans `includes/functions.php`).
 - Mouvements d'entrée, de transfert et de sortie tracés automatiquement.
 
+## Indices paramétrables
+Chaque indice est défini dans **Paramètres › Indices** et peut être modifié sans toucher au code :
+- **Formule** construite à partir de variables de base calculées pour chaque animal et chaque année
+  (`lait_moyen`, `lait_cumul`, `tb_moyen`, `gmq`, `ivv`, `nb_diag_pos`, `nb_petits`, `cout_sante`, `age_mois`, `mort`…,
+  liste complète dans le formulaire). Opérateurs `+ - * / % ^`, comparaisons, `et / ou / non`,
+  fonctions `min max abs arrondi racine log si sinon`. Exemple : `lait_cumul * (tb_moyen + tp_moyen) / 1000`.
+- **Interprétation** : seuils (min inclus, max exclu) avec libellé et couleur, ex. `< 200` Mamelle saine, `200 – 300` À surveiller, `≥ 300` Mammite.
+- **Champ d'application** : espèce, sexe, niveaux enregistrés (animal, lot, espèce, troupeau) et mode de calcul des groupes
+  (moyenne, somme, min, max, ou *ratio* : formule appliquée aux totaux du groupe pour les taux).
+- **Tester la formule** affiche le résultat animal par animal avant d'enregistrer ; l'enregistrement recalcule l'indice sur toutes les années.
+
+Les résultats (valeur, interprétation, formule utilisée, date de calcul) sont stockés dans `indices_resultats`.
+Ils sont recalculés automatiquement après chaque saisie (pesée, contrôle laitier, reproduction, santé, mouvement, fiche animal)
+pour l'année concernée, ou à la demande depuis la page **Indices**. Une icône ⚠ signale un indice dont la formule a changé depuis le dernier calcul.
+
+**Base existante** : importer `migrations/001_indices.sql` (crée les 3 tables et 11 indices par défaut sans toucher aux données).
+
 ## Sécurité
-Requêtes préparées PDO, échappement HTML, jeton CSRF sur tous les formulaires, contrôle du type des photos.
+Requêtes préparées PDO, échappement HTML, formules évaluées par un analyseur dédié (jamais `eval`), jeton CSRF sur tous les formulaires, contrôle du type des photos.
 La table `utilisateurs` est prête pour ajouter une connexion avec `password_hash()`.

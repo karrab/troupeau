@@ -63,3 +63,6 @@ function badge_statut(string $s): string {
 
 /** Seuil de cellules (milliers/mL) au-delà duquel on alerte – mammite subclinique */
 const SEUIL_CELLULES = 300;
+
+/** Moteur des indices paramétrables */
+require_once __DIR__ . '/indices.php';
