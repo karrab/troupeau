@@ -8,7 +8,7 @@ USE troupeau;
 
 SET FOREIGN_KEY_CHECKS = 0;
 DROP VIEW IF EXISTS v_indices_resultats;
-DROP TABLE IF EXISTS mensurations, indices_resultats, indices_interpretations, indices, alimentation, parametres_app, mouvements, sante, reproductions, controles_laitiers, pesees, animaux, lots, races, especes, utilisateurs;
+DROP TABLE IF EXISTS journal_connexions, profil_permissions, profils, mensurations, indices_resultats, indices_interpretations, indices, alimentation, parametres_app, mouvements, sante, reproductions, controles_laitiers, pesees, animaux, lots, races, especes, utilisateurs;
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ---------------------------------------------------------------------
@@ -168,22 +168,59 @@ CREATE TABLE mouvements (
 ) ENGINE=InnoDB;
 
 -- ---------------------------------------------------------------------
--- Utilisateurs : aucun compte n'est fourni ; le premier compte
--- administrateur est créé sur la page de connexion au premier accès.
+-- Profils (ensembles de permissions modifiables) et utilisateurs.
+-- Aucun compte n'est fourni : le premier compte administrateur est créé
+-- sur la page de connexion au premier accès.
 -- ---------------------------------------------------------------------
+CREATE TABLE profils (
+  id          INT AUTO_INCREMENT PRIMARY KEY,
+  code        VARCHAR(30) NOT NULL UNIQUE,
+  nom         VARCHAR(60) NOT NULL UNIQUE,
+  description VARCHAR(255) NULL,
+  couleur     VARCHAR(20) NOT NULL DEFAULT 'secondary',
+  systeme     TINYINT(1) NOT NULL DEFAULT 0 COMMENT '1 = Administrateur : tous les droits, non modifiable',
+  created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB;
+
+CREATE TABLE profil_permissions (
+  profil_id  INT NOT NULL,
+  permission VARCHAR(50) NOT NULL COMMENT 'Code défini dans includes/auth.php (PERMISSIONS)',
+  PRIMARY KEY (profil_id, permission),
+  CONSTRAINT fk_pp_profil FOREIGN KEY (profil_id) REFERENCES profils(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 CREATE TABLE utilisateurs (
   id                 INT AUTO_INCREMENT PRIMARY KEY,
   nom                VARCHAR(100) NOT NULL,
   email              VARCHAR(150) NOT NULL UNIQUE COMMENT 'Identifiant de connexion',
   mot_de_passe       VARCHAR(255) NOT NULL COMMENT 'password_hash()',
-  role               ENUM('admin','eleveur','veterinaire') NOT NULL DEFAULT 'eleveur',
+  profil_id          INT NULL,
+  telephone          VARCHAR(30) NULL,
+  fonction           VARCHAR(100) NULL COMMENT 'Poste dans l''exploitation',
+  photo              VARCHAR(255) NULL,
+  notes              VARCHAR(255) NULL COMMENT 'Note interne (administrateur)',
   actif              TINYINT(1) NOT NULL DEFAULT 1,
   doit_changer_mdp   TINYINT(1) NOT NULL DEFAULT 0 COMMENT 'Mot de passe provisoire à changer',
   echecs             TINYINT NOT NULL DEFAULT 0 COMMENT 'Essais de connexion échoués consécutifs',
   bloque_jusqua      DATETIME NULL,
   derniere_connexion DATETIME NULL,
-  created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT fk_utilisateur_profil FOREIGN KEY (profil_id) REFERENCES profils(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
+
+CREATE TABLE journal_connexions (
+  id             INT AUTO_INCREMENT PRIMARY KEY,
+  utilisateur_id INT NULL,
+  email          VARCHAR(150) NOT NULL,
+  date_connexion TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  succes         TINYINT(1) NOT NULL,
+  motif          VARCHAR(100) NULL,
+  ip             VARCHAR(45) NULL,
+  navigateur     VARCHAR(255) NULL,
+  KEY idx_journal (utilisateur_id, date_connexion),
+  CONSTRAINT fk_journal_utilisateur FOREIGN KEY (utilisateur_id) REFERENCES utilisateurs(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
 
 -- ---------------------------------------------------------------------
 -- Paramètres généraux de l'application
@@ -657,3 +694,94 @@ INSERT INTO parametres_app (cle, valeur, libelle) VALUES
  ('mesure_l1','','Libellé de la mesure L1'),('mesure_l2','','Libellé de la mesure L2'),('mesure_l3','','Libellé de la mesure L3'),
  ('mesure_l4','','Libellé de la mesure L4'),('mesure_l5','','Libellé de la mesure L5'),('mesure_l6','','Libellé de la mesure L6'),
  ('mesure_unite','cm','Unité des mesures L1 à L6');
+
+-- Profils fournis (permissions modifiables dans Utilisateurs › Profils)
+INSERT INTO profils (code, nom, description, couleur, systeme) VALUES
+ ('admin','Administrateur','Tous les droits, y compris profils et utilisateurs (non modifiable)','danger',1),
+ ('eleveur','Éleveur','Gestion complète du troupeau et des saisies','success',0),
+ ('technicien','Technicien / salarié','Saisies quotidiennes, sans suppression ni modification des fiches','primary',0),
+ ('veterinaire','Vétérinaire','Consultation de tout le troupeau, saisie des actes de santé','info',0),
+ ('consultation','Consultation','Lecture seule (conseiller, contrôle laitier, associé)','secondary',0);
+INSERT INTO profil_permissions (profil_id, permission)
+SELECT p.id, x.permission FROM profils p JOIN (
+  SELECT 'tableau_bord.voir' permission
+  UNION ALL SELECT 'animaux.voir' permission
+  UNION ALL SELECT 'pesees.voir' permission
+  UNION ALL SELECT 'mensurations.voir' permission
+  UNION ALL SELECT 'lait.voir' permission
+  UNION ALL SELECT 'repro.voir' permission
+  UNION ALL SELECT 'sante.voir' permission
+  UNION ALL SELECT 'alimentation.voir' permission
+  UNION ALL SELECT 'mouvements.voir' permission
+  UNION ALL SELECT 'indices.voir' permission
+  UNION ALL SELECT 'animaux.creer' permission
+  UNION ALL SELECT 'animaux.modifier' permission
+  UNION ALL SELECT 'pesees.saisir' permission
+  UNION ALL SELECT 'pesees.supprimer' permission
+  UNION ALL SELECT 'mensurations.saisir' permission
+  UNION ALL SELECT 'mensurations.supprimer' permission
+  UNION ALL SELECT 'lait.saisir' permission
+  UNION ALL SELECT 'lait.supprimer' permission
+  UNION ALL SELECT 'repro.saisir' permission
+  UNION ALL SELECT 'repro.supprimer' permission
+  UNION ALL SELECT 'sante.saisir' permission
+  UNION ALL SELECT 'sante.supprimer' permission
+  UNION ALL SELECT 'alimentation.saisir' permission
+  UNION ALL SELECT 'alimentation.supprimer' permission
+  UNION ALL SELECT 'mouvements.saisir' permission
+  UNION ALL SELECT 'mouvements.supprimer' permission
+  UNION ALL SELECT 'indices.calculer' permission
+  UNION ALL SELECT 'indices.exporter' permission
+) x WHERE p.code='eleveur';
+INSERT INTO profil_permissions (profil_id, permission)
+SELECT p.id, x.permission FROM profils p JOIN (
+  SELECT 'tableau_bord.voir' permission
+  UNION ALL SELECT 'animaux.voir' permission
+  UNION ALL SELECT 'pesees.voir' permission
+  UNION ALL SELECT 'mensurations.voir' permission
+  UNION ALL SELECT 'lait.voir' permission
+  UNION ALL SELECT 'repro.voir' permission
+  UNION ALL SELECT 'sante.voir' permission
+  UNION ALL SELECT 'alimentation.voir' permission
+  UNION ALL SELECT 'mouvements.voir' permission
+  UNION ALL SELECT 'indices.voir' permission
+  UNION ALL SELECT 'animaux.creer' permission
+  UNION ALL SELECT 'pesees.saisir' permission
+  UNION ALL SELECT 'mensurations.saisir' permission
+  UNION ALL SELECT 'lait.saisir' permission
+  UNION ALL SELECT 'repro.saisir' permission
+  UNION ALL SELECT 'sante.saisir' permission
+  UNION ALL SELECT 'alimentation.saisir' permission
+  UNION ALL SELECT 'mouvements.saisir' permission
+  UNION ALL SELECT 'indices.calculer' permission
+) x WHERE p.code='technicien';
+INSERT INTO profil_permissions (profil_id, permission)
+SELECT p.id, x.permission FROM profils p JOIN (
+  SELECT 'tableau_bord.voir' permission
+  UNION ALL SELECT 'animaux.voir' permission
+  UNION ALL SELECT 'pesees.voir' permission
+  UNION ALL SELECT 'mensurations.voir' permission
+  UNION ALL SELECT 'lait.voir' permission
+  UNION ALL SELECT 'repro.voir' permission
+  UNION ALL SELECT 'sante.voir' permission
+  UNION ALL SELECT 'alimentation.voir' permission
+  UNION ALL SELECT 'mouvements.voir' permission
+  UNION ALL SELECT 'indices.voir' permission
+  UNION ALL SELECT 'sante.saisir' permission
+  UNION ALL SELECT 'sante.supprimer' permission
+  UNION ALL SELECT 'indices.exporter' permission
+) x WHERE p.code='veterinaire';
+INSERT INTO profil_permissions (profil_id, permission)
+SELECT p.id, x.permission FROM profils p JOIN (
+  SELECT 'tableau_bord.voir' permission
+  UNION ALL SELECT 'animaux.voir' permission
+  UNION ALL SELECT 'pesees.voir' permission
+  UNION ALL SELECT 'mensurations.voir' permission
+  UNION ALL SELECT 'lait.voir' permission
+  UNION ALL SELECT 'repro.voir' permission
+  UNION ALL SELECT 'sante.voir' permission
+  UNION ALL SELECT 'alimentation.voir' permission
+  UNION ALL SELECT 'mouvements.voir' permission
+  UNION ALL SELECT 'indices.voir' permission
+  UNION ALL SELECT 'indices.exporter' permission
+) x WHERE p.code='consultation';

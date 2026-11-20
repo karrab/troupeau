@@ -9,31 +9,38 @@
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <link href="assets/style.css" rel="stylesheet">
 </head>
-<body class="role-<?= e(utilisateur()['role'] ?? 'aucun') ?>">
-<nav class="navbar navbar-expand-lg navbar-dark bg-success-subtle border-bottom no-print" style="background:#1f5130!important">
+<body>
+<?php $moi = utilisateur(); ?>
+<nav class="navbar navbar-expand-lg navbar-dark border-bottom no-print" style="background:#1f5130!important">
   <div class="container-fluid">
-    <a class="navbar-brand fw-semibold" href="index.php"><i class="bi bi-flower3"></i> <?= APP_NAME ?></a>
+    <a class="navbar-brand fw-semibold" href="<?= peut('tableau_bord.voir') ? 'index.php' : 'mon_compte.php' ?>"><i class="bi bi-flower3"></i> <?= APP_NAME ?></a>
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav"><span class="navbar-toggler-icon"></span></button>
     <div class="collapse navbar-collapse" id="nav">
       <ul class="navbar-nav me-auto">
-        <li class="nav-item"><a class="nav-link <?= $page==='index'?'active':'' ?>" href="index.php"><i class="bi bi-speedometer2"></i> Tableau de bord</a></li>
-        <li class="nav-item"><a class="nav-link <?= in_array($page,['animaux','animal','animal_form'])?'active':'' ?>" href="animaux.php"><i class="bi bi-list-ul"></i> Animaux</a></li>
-        <li class="nav-item"><a class="nav-link <?= $page==='lait'?'active':'' ?>" href="lait.php"><i class="bi bi-droplet"></i> Production laitière</a></li>
-        <li class="nav-item"><a class="nav-link <?= $page==='pesees'?'active':'' ?>" href="pesees.php"><i class="bi bi-speedometer"></i> Pesées</a></li>
-        <li class="nav-item"><a class="nav-link <?= $page==='mensurations'?'active':'' ?>" href="mensurations.php"><i class="bi bi-rulers"></i> Mensurations</a></li>
-        <li class="nav-item"><a class="nav-link <?= in_array($page,['indices','indice_form'])?'active':'' ?>" href="indices.php"><i class="bi bi-calculator"></i> Indices</a></li>
-        <?php if (a_role('admin')): ?>
-        <li class="nav-item"><a class="nav-link <?= $page==='parametres'?'active':'' ?>" href="parametres.php"><i class="bi bi-gear"></i> Paramètres</a></li>
+        <?php foreach ([
+            ['tableau_bord.voir', ['index'], 'index.php', 'speedometer2', 'Tableau de bord'],
+            ['animaux.voir', ['animaux', 'animal', 'animal_form'], 'animaux.php', 'list-ul', 'Animaux'],
+            ['lait.voir', ['lait'], 'lait.php', 'droplet', 'Production laitière'],
+            ['pesees.voir', ['pesees'], 'pesees.php', 'speedometer', 'Pesées'],
+            ['mensurations.voir', ['mensurations'], 'mensurations.php', 'rulers', 'Mensurations'],
+            ['indices.voir', ['indices', 'indice_form'], 'indices.php', 'calculator', 'Indices'],
+          ] as [$perm, $pages, $href, $ico, $lib]) if (peut($perm)): ?>
+          <li class="nav-item"><a class="nav-link <?= in_array($page, $pages, true) ? 'active' : '' ?>" href="<?= $href ?>"><i class="bi bi-<?= $ico ?>"></i> <?= $lib ?></a></li>
         <?php endif; ?>
       </ul>
-      <?php if (peut_saisir()): ?><a href="animal_form.php" class="btn btn-light btn-sm me-2"><i class="bi bi-plus-lg"></i> Nouvel animal</a><?php endif; ?>
-      <?php if ($moi = utilisateur()): ?>
+      <?php if (peut('animaux.creer')): ?><a href="animal_form.php" class="btn btn-light btn-sm me-2"><i class="bi bi-plus-lg"></i> Nouvel animal</a><?php endif; ?>
+      <?php if ($moi): ?>
       <div class="dropdown">
-        <button class="btn btn-sm btn-outline-light dropdown-toggle" data-bs-toggle="dropdown" aria-expanded="false">
-          <i class="bi bi-person-circle"></i> <?= e($moi['nom']) ?> <span class="badge text-bg-light ms-1"><?= ROLES[$moi['role']][0] ?></span></button>
+        <button class="btn btn-sm btn-outline-light dropdown-toggle d-flex align-items-center gap-2" data-bs-toggle="dropdown" aria-expanded="false">
+          <?= avatar($moi, 24) ?> <span><?= e($moi['nom']) ?></span></button>
         <ul class="dropdown-menu dropdown-menu-end">
-          <li><a class="dropdown-item" href="mon_compte.php"><i class="bi bi-key"></i> Mon compte</a></li>
-          <?php if (a_role('admin')): ?><li><a class="dropdown-item" href="utilisateurs.php"><i class="bi bi-people"></i> Utilisateurs</a></li><?php endif; ?>
+          <li><div class="dropdown-item-text small"><?= badge_profil($moi) ?><div class="text-muted"><?= e($moi['email']) ?></div></div></li>
+          <li><hr class="dropdown-divider"></li>
+          <li><a class="dropdown-item <?= $page === 'mon_compte' ? 'active' : '' ?>" href="mon_compte.php"><i class="bi bi-person"></i> Mon profil</a></li>
+          <?php if (peut_un('parametres.gerer', 'indices.configurer') || peut_un('utilisateurs.gerer', 'profils.gerer')): ?><li><h6 class="dropdown-header">Administration</h6></li><?php endif; ?>
+          <?php if (peut_un('parametres.gerer', 'indices.configurer')): ?><li><a class="dropdown-item <?= $page === 'parametres' ? 'active' : '' ?>" href="parametres.php"><i class="bi bi-gear"></i> Paramètres</a></li><?php endif; ?>
+          <?php if (peut_un('utilisateurs.gerer', 'profils.gerer')): ?><li><a class="dropdown-item <?= in_array($page, ['utilisateurs', 'utilisateur'], true) ? 'active' : '' ?>" href="utilisateurs.php"><i class="bi bi-people"></i> Utilisateurs</a></li><?php endif; ?>
+          <?php if (peut('profils.gerer')): ?><li><a class="dropdown-item <?= $page === 'profils' ? 'active' : '' ?>" href="profils.php"><i class="bi bi-shield-lock"></i> Profils et permissions</a></li><?php endif; ?>
           <li><hr class="dropdown-divider"></li>
           <li><form method="post" action="logout.php"><?= csrf_field() ?><button class="dropdown-item text-danger"><i class="bi bi-box-arrow-right"></i> Se déconnecter</button></form></li>
         </ul>

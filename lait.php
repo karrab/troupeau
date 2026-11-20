@@ -1,5 +1,6 @@
 <?php
 require 'includes/functions.php';
+exiger('lait.voir');
 $titre = 'Production laitière';
 
 $annee = (int)($_GET['annee'] ?? date('Y'));

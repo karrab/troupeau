@@ -1,6 +1,6 @@
 <?php
 require 'includes/functions.php';
-exiger_role('admin', 'eleveur');
+exiger(empty($_GET['id']) && empty($_POST['id']) ? 'animaux.creer' : 'animaux.modifier');
 
 $id = (int)($_GET['id'] ?? 0);
 $a  = ['espece_id' => 1, 'sexe' => 'F', 'origine' => 'naissance', 'statut' => 'actif', 'date_entree' => date('Y-m-d')];
@@ -25,6 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     // Suppression
     if (isset($_POST['supprimer']) && $id) {
+        exiger('animaux.supprimer');
         $pdo->prepare('DELETE FROM animaux WHERE id=?')->execute([$id]);
         if (!empty($a['photo']) && is_file(UPLOAD_DIR . $a['photo'])) unlink(UPLOAD_DIR . $a['photo']);
         try { recalculer_indices($pdo); } catch (Throwable $e) { error_log('Indices : ' . $e->getMessage()); }
@@ -167,7 +168,7 @@ require 'includes/header.php';
     <div class="d-grid gap-2">
       <button class="btn btn-primary"><i class="bi bi-check-lg"></i> Enregistrer</button>
       <a href="<?= $id ? 'animal.php?id=' . $id : 'animaux.php' ?>" class="btn btn-outline-secondary">Annuler</a>
-      <?php if ($id): ?><button name="supprimer" value="1" class="btn btn-outline-danger mt-4" formnovalidate onclick="return confirm('Supprimer définitivement cet animal et tout son historique ? Préférez le statut « Vendu » ou « Mort » pour garder la traçabilité.')"><i class="bi bi-trash"></i> Supprimer</button><?php endif; ?>
+      <?php if ($id && peut('animaux.supprimer')): ?><button name="supprimer" value="1" class="btn btn-outline-danger mt-4" formnovalidate onclick="return confirm('Supprimer définitivement cet animal et tout son historique ? Préférez le statut « Vendu » ou « Mort » pour garder la traçabilité.')"><i class="bi bi-trash"></i> Supprimer</button><?php endif; ?>
     </div>
   </div>
 </div>

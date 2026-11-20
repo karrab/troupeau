@@ -1,5 +1,6 @@
 <?php
 require 'includes/functions.php';
+exiger('tableau_bord.voir');
 $titre = 'Tableau de bord';
 
 // Effectifs
@@ -52,6 +53,12 @@ $st = $pdo->prepare("SELECT i.*, r.valeur, r.interpretation, r.couleur FROM indi
     WHERE i.actif=1 AND i.code IN ('R01','R04','L02','S02','P01','P02') ORDER BY i.ordre");
 $st->execute([$campIdx]);
 $indicesCles = $st->fetchAll();
+
+// Chaque bloc n'est affiché qu'avec la permission de consultation correspondante
+if (!peut('sante.voir'))   { $rappels = []; $attente = []; }
+if (!peut('repro.voir'))   $misesBas = [];
+if (!peut('lait.voir'))    { $cellules = []; $laitStats = null; $lait = null; $evol = []; }
+if (!peut('indices.voir')) $indicesCles = [];
 
 require 'includes/header.php';
 ?>

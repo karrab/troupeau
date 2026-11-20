@@ -1,5 +1,6 @@
 <?php
 require 'includes/functions.php';
+exiger('animaux.voir');
 
 $id = (int)($_GET['id'] ?? 0);
 $st = $pdo->prepare("SELECT a.*, e.nom espece, e.gestation_jours, r.nom race, l.nom lot,
@@ -12,6 +13,8 @@ $st->execute([$id]);
 $a = $st->fetch() ?: redirect('animaux.php');
 $titre = 'Fiche ' . $a['numero_identification'];
 $tab = $_GET['tab'] ?? 'identite';
+$ongletsPerm = ['poids' => 'pesees', 'lait' => 'lait', 'repro' => 'repro', 'sante' => 'sante', 'mvt' => 'mouvements', 'mens' => 'mensurations', 'alim' => 'alimentation', 'indices' => 'indices'];
+if (isset($ongletsPerm[$tab]) && !peut($ongletsPerm[$tab] . '.voir')) $tab = 'identite';
 
 function lignes(PDO $pdo, string $sql, int $id): array { $s = $pdo->prepare($sql); $s->execute([$id]); return $s->fetchAll(); }
 
@@ -117,9 +120,9 @@ require 'includes/header.php';
 $active = fn($t) => $tab === $t ? 'active' : '';
 $show   = fn($t) => $tab === $t ? 'show active' : '';
 $del = function (string $type, int $rid) use ($id) {
-    if (!peut_saisir($type)) return '';
+    if (!peut_supprimer($type)) return '';
     return '<form method="post" action="actions.php" class="d-inline" onsubmit="return confirm(\'Supprimer cette ligne ?\')">' . csrf_field()
-      . '<input type="hidden" name="op" value="del"><input type="hidden" name="type" value="' . $type . '"><input type="hidden" name="saisie" value="' . $type . '"><input type="hidden" name="animal_id" value="' . $id . '">'
+      . '<input type="hidden" name="op" value="del"><input type="hidden" name="type" value="' . $type . '"><input type="hidden" name="animal_id" value="' . $id . '">'
       . '<input type="hidden" name="id" value="' . $rid . '"><button class="btn btn-sm btn-link text-danger p-0" title="Supprimer"><i class="bi bi-trash"></i></button></form>';
 };
 ?>
@@ -134,38 +137,38 @@ $del = function (string $type, int $rid) use ($id) {
       <div class="d-flex flex-wrap align-items-center gap-2 mb-1">
         <h1 class="h3 mb-0"><?= e($a['numero_identification']) ?> <span class="fw-normal"><?= e($a['nom']) ?></span></h1>
         <?= badge_statut($a['statut']) ?>
-        <?php if ($attenteLait): ?><span class="badge text-bg-danger"><i class="bi bi-droplet-half"></i> Lait interdit jusqu'au <?= dfr($attenteLait) ?></span><?php endif; ?>
-        <?php if ($attenteViande): ?><span class="badge text-bg-warning">Viande interdite jusqu'au <?= dfr($attenteViande) ?></span><?php endif; ?>
+        <?php if ($attenteLait && peut('sante.voir')): ?><span class="badge text-bg-danger"><i class="bi bi-droplet-half"></i> Lait interdit jusqu'au <?= dfr($attenteLait) ?></span><?php endif; ?>
+        <?php if ($attenteViande && peut('sante.voir')): ?><span class="badge text-bg-warning">Viande interdite jusqu'au <?= dfr($attenteViande) ?></span><?php endif; ?>
       </div>
       <div class="text-muted"><?= e($a['espece']) ?> · <?= e($a['race'] ?? 'race non renseignée') ?> · <?= $a['sexe']==='F'?'Femelle':'Mâle' ?> · <?= e($a['categorie']) ?> · <?= age($a['date_naissance']) ?> · <?= e($a['lot'] ?? 'sans lot') ?></div>
     </div>
     <div class="col-12 col-md-auto no-print">
-      <?php if (peut_saisir()): ?><a href="animal_form.php?id=<?= $id ?>" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i> Modifier</a><?php endif; ?>
+      <?php if (peut('animaux.modifier')): ?><a href="animal_form.php?id=<?= $id ?>" class="btn btn-primary btn-sm"><i class="bi bi-pencil"></i> Modifier</a><?php endif; ?>
       <button onclick="window.print()" class="btn btn-outline-secondary btn-sm"><i class="bi bi-printer"></i> Imprimer</button>
     </div>
   </div>
   <div class="row g-3 mt-1 text-center">
-    <div class="col-6 col-md-3 kpi"><div class="lbl">Dernier poids</div><div class="val fs-4"><?= $dernierePesee ? nfr($dernierePesee['poids'],0).' kg' : '—' ?></div><div class="small text-muted"><?= $dernierePesee ? dfr($dernierePesee['date_pesee']) : '' ?></div></div>
-    <div class="col-6 col-md-3 kpi"><div class="lbl">GMQ global</div><div class="val fs-4"><?= $gmqGlobal !== null ? $gmqGlobal.' g/j' : '—' ?></div></div>
+    <?php if (peut('pesees.voir')): ?><div class="col-6 col-md-3 kpi"><div class="lbl">Dernier poids</div><div class="val fs-4"><?= $dernierePesee ? nfr($dernierePesee['poids'],0).' kg' : '—' ?></div><div class="small text-muted"><?= $dernierePesee ? dfr($dernierePesee['date_pesee']) : '' ?></div></div>
+    <div class="col-6 col-md-3 kpi"><div class="lbl">GMQ global</div><div class="val fs-4"><?= $gmqGlobal !== null ? $gmqGlobal.' g/j' : '—' ?></div></div><?php endif; ?>
     <?php if ($a['sexe'] === 'F'): ?>
-    <div class="col-6 col-md-3 kpi"><div class="lbl">Lait (dernier contrôle)</div><div class="val fs-4"><?= $laits ? nfr(end($laits)['quantite_totale']).' L' : '—' ?></div><div class="small text-muted"><?= $joursLait !== null ? $joursLait . ' j de lactation' : '' ?></div></div>
-    <div class="col-6 col-md-3 kpi"><div class="lbl">Reproduction</div><div class="val fs-6 pt-2"><?= e($etatRepro) ?></div><div class="small text-muted"><?= $mbPrevue ? 'Mise bas prévue ' . dfr($mbPrevue) : '' ?></div></div>
+    <?php if (peut('lait.voir')): ?><div class="col-6 col-md-3 kpi"><div class="lbl">Lait (dernier contrôle)</div><div class="val fs-4"><?= $laits ? nfr(end($laits)['quantite_totale']).' L' : '—' ?></div><div class="small text-muted"><?= $joursLait !== null ? $joursLait . ' j de lactation' : '' ?></div></div><?php endif; ?>
+    <?php if (peut('repro.voir')): ?><div class="col-6 col-md-3 kpi"><div class="lbl">Reproduction</div><div class="val fs-6 pt-2"><?= e($etatRepro) ?></div><div class="small text-muted"><?= $mbPrevue ? 'Mise bas prévue ' . dfr($mbPrevue) : '' ?></div></div><?php endif; ?>
     <?php endif; ?>
   </div>
 </div>
 
 <ul class="nav nav-tabs" role="tablist">
   <li class="nav-item"><button class="nav-link <?= $active('identite') ?>" data-bs-toggle="tab" data-bs-target="#identite"><i class="bi bi-card-text"></i> Identité</button></li>
-  <li class="nav-item"><button class="nav-link <?= $active('poids') ?>" data-bs-toggle="tab" data-bs-target="#poids"><i class="bi bi-speedometer"></i> Poids <span class="badge text-bg-light"><?= count($pesees) ?></span></button></li>
+  <?php if (peut('pesees.voir')): ?>  <li class="nav-item"><button class="nav-link <?= $active('poids') ?>" data-bs-toggle="tab" data-bs-target="#poids"><i class="bi bi-speedometer"></i> Poids <span class="badge text-bg-light"><?= count($pesees) ?></span></button></li><?php endif; ?>
   <?php if ($a['sexe'] === 'F'): ?>
-  <li class="nav-item"><button class="nav-link <?= $active('lait') ?>" data-bs-toggle="tab" data-bs-target="#lait"><i class="bi bi-droplet"></i> Lait <span class="badge text-bg-light"><?= count($laits) ?></span></button></li>
-  <li class="nav-item"><button class="nav-link <?= $active('repro') ?>" data-bs-toggle="tab" data-bs-target="#repro"><i class="bi bi-heart"></i> Reproduction <span class="badge text-bg-light"><?= count($repros) ?></span></button></li>
+  <?php if (peut('lait.voir')): ?>  <li class="nav-item"><button class="nav-link <?= $active('lait') ?>" data-bs-toggle="tab" data-bs-target="#lait"><i class="bi bi-droplet"></i> Lait <span class="badge text-bg-light"><?= count($laits) ?></span></button></li><?php endif; ?>
+  <?php if (peut('repro.voir')): ?>  <li class="nav-item"><button class="nav-link <?= $active('repro') ?>" data-bs-toggle="tab" data-bs-target="#repro"><i class="bi bi-heart"></i> Reproduction <span class="badge text-bg-light"><?= count($repros) ?></span></button></li><?php endif; ?>
   <?php endif; ?>
-  <li class="nav-item"><button class="nav-link <?= $active('sante') ?>" data-bs-toggle="tab" data-bs-target="#sante"><i class="bi bi-capsule"></i> Santé <span class="badge text-bg-light"><?= count($soins) ?></span></button></li>
-  <li class="nav-item"><button class="nav-link <?= $active('mvt') ?>" data-bs-toggle="tab" data-bs-target="#mvt"><i class="bi bi-arrow-left-right"></i> Mouvements</button></li>
-  <li class="nav-item"><button class="nav-link <?= $active('mens') ?>" data-bs-toggle="tab" data-bs-target="#mens"><i class="bi bi-rulers"></i> Mensurations <span class="badge text-bg-light"><?= count($mensMB) + count($mensW) ?></span></button></li>
-  <li class="nav-item"><button class="nav-link <?= $active('alim') ?>" data-bs-toggle="tab" data-bs-target="#alim"><i class="bi bi-basket"></i> Alimentation <span class="badge text-bg-light"><?= count($alims) ?></span></button></li>
-  <li class="nav-item"><button class="nav-link <?= $active('indices') ?>" data-bs-toggle="tab" data-bs-target="#indices"><i class="bi bi-calculator"></i> Indices <span class="badge text-bg-light"><?= count($indCamp) + count($colsLact) ?></span></button></li>
+  <?php if (peut('sante.voir')): ?>  <li class="nav-item"><button class="nav-link <?= $active('sante') ?>" data-bs-toggle="tab" data-bs-target="#sante"><i class="bi bi-capsule"></i> Santé <span class="badge text-bg-light"><?= count($soins) ?></span></button></li><?php endif; ?>
+  <?php if (peut('mouvements.voir')): ?>  <li class="nav-item"><button class="nav-link <?= $active('mvt') ?>" data-bs-toggle="tab" data-bs-target="#mvt"><i class="bi bi-arrow-left-right"></i> Mouvements</button></li><?php endif; ?>
+  <?php if (peut('mensurations.voir')): ?>  <li class="nav-item"><button class="nav-link <?= $active('mens') ?>" data-bs-toggle="tab" data-bs-target="#mens"><i class="bi bi-rulers"></i> Mensurations <span class="badge text-bg-light"><?= count($mensMB) + count($mensW) ?></span></button></li><?php endif; ?>
+  <?php if (peut('alimentation.voir')): ?>  <li class="nav-item"><button class="nav-link <?= $active('alim') ?>" data-bs-toggle="tab" data-bs-target="#alim"><i class="bi bi-basket"></i> Alimentation <span class="badge text-bg-light"><?= count($alims) ?></span></button></li><?php endif; ?>
+  <?php if (peut('indices.voir')): ?>  <li class="nav-item"><button class="nav-link <?= $active('indices') ?>" data-bs-toggle="tab" data-bs-target="#indices"><i class="bi bi-calculator"></i> Indices <span class="badge text-bg-light"><?= count($indCamp) + count($colsLact) ?></span></button></li><?php endif; ?>
 </ul>
 
 <div class="tab-content card border-top-0 rounded-top-0 p-3">
@@ -201,12 +204,13 @@ $del = function (string $type, int $rid) use ($id) {
     <?php endforeach; ?></ul><?php else: ?><p class="text-muted small">Aucun descendant enregistré.</p><?php endif; ?>
   </div>
 
+<?php if (peut('pesees.voir')): ?>
   <!-- ================= POIDS ================= -->
   <div class="tab-pane fade <?= $show('poids') ?>" id="poids">
     <div class="row g-3">
       <div class="col-lg-7"><div class="chart-box"><canvas id="chartPoids"></canvas></div></div>
       <div class="col-lg-5">
-        <form method="post" action="actions.php" class="border rounded p-3 bg-light">
+        <?php if (peut_saisir('pesee')): ?><form method="post" action="actions.php" class="border rounded p-3 bg-light">
           <?= csrf_field() ?><input type="hidden" name="op" value="add"><input type="hidden" name="type" value="pesee"><input type="hidden" name="animal_id" value="<?= $id ?>">
           <h3 class="h6">Nouvelle pesée</h3>
           <div class="row g-2">
@@ -217,7 +221,7 @@ $del = function (string $type, int $rid) use ($id) {
             <div class="col-12"><input name="observations" class="form-control form-control-sm" placeholder="Observations"></div>
             <div class="col-12"><button class="btn btn-primary btn-sm w-100">Ajouter</button></div>
           </div>
-        </form>
+        </form><?php else: ?><p class="small text-muted border rounded p-3 bg-light"><i class="bi bi-eye"></i> Consultation seule : votre profil ne permet pas cette saisie.</p><?php endif; ?>
       </div>
     </div>
     <div class="table-responsive mt-3"><table class="table table-sm">
@@ -236,6 +240,8 @@ $del = function (string $type, int $rid) use ($id) {
   </div>
 
   <?php if ($a['sexe'] === 'F'): ?>
+<?php if (peut('lait.voir')): ?>
+<?php endif; ?>
   <!-- ================= LAIT ================= -->
   <div class="tab-pane fade <?= $show('lait') ?>" id="lait">
     <div class="row g-2 mb-3 text-center">
@@ -250,7 +256,7 @@ $del = function (string $type, int $rid) use ($id) {
       <div class="col-lg-7"><div class="chart-box"><canvas id="chartLait"></canvas></div>
         <p class="small text-muted mt-1">* Estimation depuis la dernière mise bas (<?= dfr($derniereMB) ?>) par la méthode des trapèzes entre contrôles.</p></div>
       <div class="col-lg-5">
-        <form method="post" action="actions.php" class="border rounded p-3 bg-light">
+        <?php if (peut_saisir('lait')): ?><form method="post" action="actions.php" class="border rounded p-3 bg-light">
           <?= csrf_field() ?><input type="hidden" name="op" value="add"><input type="hidden" name="type" value="lait"><input type="hidden" name="animal_id" value="<?= $id ?>">
           <h3 class="h6">Nouveau contrôle laitier</h3>
           <div class="row g-2">
@@ -263,7 +269,7 @@ $del = function (string $type, int $rid) use ($id) {
             <div class="col-12"><input name="observations" class="form-control form-control-sm" placeholder="Observations"></div>
             <div class="col-12"><button class="btn btn-primary btn-sm w-100">Ajouter</button></div>
           </div>
-        </form>
+        </form><?php else: ?><p class="small text-muted border rounded p-3 bg-light"><i class="bi bi-eye"></i> Consultation seule : votre profil ne permet pas cette saisie.</p><?php endif; ?>
       </div>
     </div>
     <div class="table-responsive mt-3"><table class="table table-sm">
@@ -277,6 +283,8 @@ $del = function (string $type, int $rid) use ($id) {
     </table></div>
   </div>
 
+<?php if (peut('repro.voir')): ?>
+<?php endif; ?>
   <!-- ================= REPRODUCTION ================= -->
   <div class="tab-pane fade <?= $show('repro') ?>" id="repro">
     <div class="row g-3">
@@ -298,7 +306,7 @@ $del = function (string $type, int $rid) use ($id) {
         </table></div>
       </div>
       <div class="col-lg-5">
-        <form method="post" action="actions.php" class="border rounded p-3 bg-light">
+        <?php if (peut_saisir('repro')): ?><form method="post" action="actions.php" class="border rounded p-3 bg-light">
           <?= csrf_field() ?><input type="hidden" name="op" value="add"><input type="hidden" name="type" value="repro"><input type="hidden" name="animal_id" value="<?= $id ?>">
           <h3 class="h6">Nouvel événement</h3>
           <div class="row g-2">
@@ -311,22 +319,26 @@ $del = function (string $type, int $rid) use ($id) {
             <div class="col-6 r r-diagnostic"><label class="form-label small">Résultat</label><select name="resultat" class="form-select form-select-sm"><option value="">—</option><option value="positif">Positif</option><option value="negatif">Négatif</option></select></div>
             <div class="col-6 r r-mise_bas"><label class="form-label small">Nombre de petits nés</label><input type="number" min="0" max="10" name="nb_petits" class="form-control form-control-sm" value="1"></div>
             <div class="col-6 r r-mise_bas"><label class="form-label small">Dont mort-nés</label><input type="number" min="0" max="10" name="nb_morts_nes" class="form-control form-control-sm" value="0"></div>
+            <?php if (peut('mensurations.saisir')): ?>
             <div class="col-12 r r-mise_bas"><div class="small fw-semibold mt-1">Mensuration de la mère <span class="text-muted fw-normal">(facultatif)</span></div></div>
             <div class="col-4 r r-mise_bas"><label class="form-label small">PMB (kg)</label><input type="number" step="0.1" min="0" name="mb_poids" class="form-control form-control-sm"></div>
             <?php foreach ($libsMes as $k => $lib): ?><div class="col-4 r r-mise_bas"><label class="form-label small text-truncate d-block" title="<?= e($lib) ?>"><?= e($lib) ?></label><input type="number" step="0.1" min="0" name="mb_<?= $k ?>" class="form-control form-control-sm" placeholder="<?= e($uniteMes) ?>"></div><?php endforeach; ?>
+            <?php endif; ?>
             <div class="col-6"><label class="form-label small">Intervenant</label><input name="intervenant" class="form-control form-control-sm"></div>
             <div class="col-12"><input name="observations" class="form-control form-control-sm" placeholder="Observations"></div>
             <div class="col-12 small text-muted r r-saillie r-insemination">La mise bas prévue est calculée automatiquement (<?= (int)$a['gestation_jours'] ?> j de gestation).</div>
             <div class="col-12"><button class="btn btn-primary btn-sm w-100">Ajouter</button></div>
           </div>
-        </form>
+        </form><?php else: ?><p class="small text-muted border rounded p-3 bg-light"><i class="bi bi-eye"></i> Consultation seule : votre profil ne permet pas cette saisie.</p><?php endif; ?>
         <p class="small text-muted mt-2 mb-0">Après une mise bas, pensez à créer la fiche du petit avec cette femelle comme mère.
-          <a href="animal_form.php?mere=<?= $id ?>" class="no-print">Créer le petit →</a></p>
+          <?php if (peut('animaux.creer')): ?><a href="animal_form.php?mere=<?= $id ?>" class="no-print">Créer le petit →</a><?php endif; ?></p>
       </div>
     </div>
   </div>
   <?php endif; ?>
 
+<?php if (peut('sante.voir')): ?>
+<?php endif; ?>
   <!-- ================= SANTÉ ================= -->
   <div class="tab-pane fade <?= $show('sante') ?>" id="sante">
     <div class="row g-3">
@@ -343,8 +355,8 @@ $del = function (string $type, int $rid) use ($id) {
         <?php if ($soins): ?><tfoot><tr><th colspan="5" class="text-end">Coût total</th><th class="text-end"><?= nfr(array_sum(array_column($soins, 'cout')), 2) ?></th><th colspan="2"></th></tr></tfoot><?php endif; ?>
       </table></div></div>
       <div class="col-lg-4">
-        <form method="post" action="actions.php" class="border rounded p-3 bg-light">
-          <?= csrf_field() ?><input type="hidden" name="op" value="add"><input type="hidden" name="type" value="sante"><input type="hidden" name="animal_id" value="<?= $id ?>"><input type="hidden" name="saisie" value="sante">
+        <?php if (peut_saisir('sante')): ?><form method="post" action="actions.php" class="border rounded p-3 bg-light">
+          <?= csrf_field() ?><input type="hidden" name="op" value="add"><input type="hidden" name="type" value="sante"><input type="hidden" name="animal_id" value="<?= $id ?>">
           <h3 class="h6">Nouvelle intervention</h3>
           <div class="row g-2">
             <div class="col-6"><label class="form-label small">Date</label><input type="date" name="date_intervention" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" required></div>
@@ -360,11 +372,13 @@ $del = function (string $type, int $rid) use ($id) {
             <div class="col-12"><input name="veterinaire" class="form-control form-control-sm" placeholder="Vétérinaire"></div>
             <div class="col-12"><button class="btn btn-primary btn-sm w-100">Ajouter</button></div>
           </div>
-        </form>
+        </form><?php else: ?><p class="small text-muted border rounded p-3 bg-light"><i class="bi bi-eye"></i> Consultation seule : votre profil ne permet pas cette saisie.</p><?php endif; ?>
       </div>
     </div>
   </div>
 
+<?php if (peut('mouvements.voir')): ?>
+<?php endif; ?>
   <!-- ================= MOUVEMENTS ================= -->
   <div class="tab-pane fade <?= $show('mvt') ?>" id="mvt">
     <div class="row g-3">
@@ -376,7 +390,7 @@ $del = function (string $type, int $rid) use ($id) {
         <?php endforeach; if (!$mvts): ?><tr><td colspan="7" class="text-muted text-center">Aucun mouvement.</td></tr><?php endif; ?></tbody>
       </table></div>
       <div class="col-lg-4">
-        <form method="post" action="actions.php" class="border rounded p-3 bg-light">
+        <?php if (peut_saisir('mvt')): ?><form method="post" action="actions.php" class="border rounded p-3 bg-light">
           <?= csrf_field() ?><input type="hidden" name="op" value="add"><input type="hidden" name="type" value="mvt"><input type="hidden" name="animal_id" value="<?= $id ?>">
           <h3 class="h6">Transfert de lot</h3>
           <div class="row g-2">
@@ -386,12 +400,14 @@ $del = function (string $type, int $rid) use ($id) {
             <div class="col-12"><input name="motif" class="form-control form-control-sm" placeholder="Motif (sevrage, mise à l'herbe…)"></div>
             <div class="col-12"><button class="btn btn-primary btn-sm w-100">Transférer</button></div>
           </div>
-        </form>
+        </form><?php else: ?><p class="small text-muted border rounded p-3 bg-light"><i class="bi bi-eye"></i> Consultation seule : votre profil ne permet pas cette saisie.</p><?php endif; ?>
         <p class="small text-muted mt-2">Pour une vente, une mort ou une réforme, changez le statut dans <a href="animal_form.php?id=<?= $id ?>">Modifier</a> : la sortie est enregistrée automatiquement.</p>
       </div>
     </div>
   </div>
 
+<?php if (peut('mensurations.voir')): ?>
+<?php endif; ?>
   <!-- ================= MENSURATIONS ================= -->
   <div class="tab-pane fade <?= $show('mens') ?>" id="mens">
     <?php $colsMes = fn() => implode('', array_map(fn($l) => '<th class="text-end small" title="' . e($l) . '">' . e(explode(' – ', $l)[0]) . '</th>', $libsMes)); ?>
@@ -409,7 +425,7 @@ $del = function (string $type, int $rid) use ($id) {
       </table></div></div>
       <div class="col-lg-4">
         <?php if ($mbSansMesure): ?>
-        <form method="post" action="actions.php" class="border rounded p-3 bg-light">
+        <?php if (peut_saisir('mens')): ?><form method="post" action="actions.php" class="border rounded p-3 bg-light">
           <?= csrf_field() ?><input type="hidden" name="op" value="add"><input type="hidden" name="type" value="mens"><input type="hidden" name="type_mesure" value="mise_bas"><input type="hidden" name="animal_id" value="<?= $id ?>">
           <h3 class="h6">Mensuration de mise bas</h3>
           <div class="row g-2">
@@ -420,7 +436,7 @@ $del = function (string $type, int $rid) use ($id) {
             <input type="hidden" name="date_mesure" value="<?= date('Y-m-d') ?>">
             <div class="col-12"><button class="btn btn-primary btn-sm w-100">Ajouter</button></div>
           </div>
-        </form>
+        </form><?php else: ?><p class="small text-muted border rounded p-3 bg-light"><i class="bi bi-eye"></i> Consultation seule : votre profil ne permet pas cette saisie.</p><?php endif; ?>
         <?php else: ?><p class="small text-muted">Toutes les mises bas enregistrées ont leurs mensurations. Saisissez la PMB directement avec une nouvelle mise bas (onglet Reproduction).</p><?php endif; ?>
       </div>
     </div>
@@ -446,7 +462,7 @@ $del = function (string $type, int $rid) use ($id) {
         <?php if (count($mensW) >= 2): ?><div class="chart-box"><canvas id="chartMens"></canvas></div><?php endif; ?>
       </div>
       <div class="col-lg-4">
-        <form method="post" action="actions.php" class="border rounded p-3 bg-light">
+        <?php if (peut_saisir('mens')): ?><form method="post" action="actions.php" class="border rounded p-3 bg-light">
           <?= csrf_field() ?><input type="hidden" name="op" value="add"><input type="hidden" name="type" value="mens"><input type="hidden" name="type_mesure" value="croissance"><input type="hidden" name="animal_id" value="<?= $id ?>">
           <h3 class="h6">Nouvelle mensuration</h3>
           <div class="row g-2">
@@ -460,13 +476,15 @@ $del = function (string $type, int $rid) use ($id) {
             <div class="col-8"><input name="observations" class="form-control form-control-sm" placeholder="Observations"></div>
             <div class="col-12"><button class="btn btn-primary btn-sm w-100">Ajouter</button></div>
           </div>
-        </form>
+        </form><?php else: ?><p class="small text-muted border rounded p-3 bg-light"><i class="bi bi-eye"></i> Consultation seule : votre profil ne permet pas cette saisie.</p><?php endif; ?>
         <p class="small text-muted mt-2">Le poids saisi est aussi enregistré comme pesée (GMQ, sevrage, indices). Séance pour tout un lot : <a href="mensurations.php">Mensurations</a>.</p>
       </div>
     </div>
     <?php if (!$mensW && !$jeune): ?></div></details><?php endif; ?>
   </div>
 
+<?php if (peut('alimentation.voir')): ?>
+<?php endif; ?>
   <!-- ================= ALIMENTATION ================= -->
   <div class="tab-pane fade <?= $show('alim') ?>" id="alim">
     <div class="row g-3">
@@ -479,7 +497,7 @@ $del = function (string $type, int $rid) use ($id) {
         <?php if ($alims): ?><tfoot><tr class="fw-semibold"><td colspan="2">Total</td><td class="text-end"><?= nfr(array_sum(array_column($alims, 'quantite_kg'))) ?> kg</td><td class="text-end"><?= nfr(array_sum(array_column($alims, 'cout')), 2) ?></td><td colspan="2"></td></tr></tfoot><?php endif; ?>
       </table></div>
       <div class="col-lg-4">
-        <form method="post" action="actions.php" class="border rounded p-3 bg-light">
+        <?php if (peut_saisir('alim')): ?><form method="post" action="actions.php" class="border rounded p-3 bg-light">
           <?= csrf_field() ?><input type="hidden" name="op" value="add"><input type="hidden" name="type" value="alim"><input type="hidden" name="animal_id" value="<?= $id ?>">
           <h3 class="h6">Aliment distribué</h3>
           <div class="row g-2">
@@ -491,17 +509,19 @@ $del = function (string $type, int $rid) use ($id) {
             <div class="col-12"><input name="observations" class="form-control form-control-sm" placeholder="Observations"></div>
             <div class="col-12"><button class="btn btn-primary btn-sm w-100">Ajouter</button></div>
           </div>
-        </form>
+        </form><?php else: ?><p class="small text-muted border rounded p-3 bg-light"><i class="bi bi-eye"></i> Consultation seule : votre profil ne permet pas cette saisie.</p><?php endif; ?>
         <p class="small text-muted mt-2">Sert au calcul de l'indice de consommation (aliment ÷ gain de poids).</p>
       </div>
     </div>
   </div>
 
+<?php if (peut('indices.voir')): ?>
+<?php endif; ?>
   <!-- ================= INDICES ================= -->
   <div class="tab-pane fade <?= $show('indices') ?>" id="indices">
     <div class="d-flex justify-content-between align-items-center mb-2">
       <h3 class="h6 mb-0">Indices par campagne</h3>
-      <?php if (a_role('admin')): ?><a href="parametres.php#indices" class="small no-print"><i class="bi bi-sliders"></i> Formules et seuils</a><?php endif; ?>
+      <?php if (peut('indices.configurer')): ?><a href="parametres.php#indices" class="small no-print"><i class="bi bi-sliders"></i> Formules et seuils</a><?php endif; ?>
     </div>
     <?php if ($indCamp): ?>
     <div class="table-responsive"><table class="table table-sm align-middle">
@@ -527,6 +547,7 @@ $del = function (string $type, int $rid) use ($id) {
     <?php endif; ?>
     <p class="small text-muted no-print">Indices recalculés automatiquement à chaque saisie. Production journalière (L01) : voir l'onglet Lait et la page <a href="indices.php?niveau=animal&amp;vue=jour">Indices</a>.</p>
   </div>
+<?php endif; ?>
 </div>
 <?php
 $jsPoids = json_encode(array_map(fn($p) => ['x' => $p['date_pesee'], 'y' => (float)$p['poids']], $pesees));

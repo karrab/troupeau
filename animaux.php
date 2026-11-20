@@ -1,5 +1,6 @@
 <?php
 require 'includes/functions.php';
+exiger('animaux.voir');
 $titre = 'Animaux';
 
 $f = [

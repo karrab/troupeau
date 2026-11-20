@@ -11,7 +11,10 @@ $tables   = ['pesee' => ['pesees', 'poids'], 'lait' => ['controles_laitiers', 'l
              'sante' => ['sante', 'sante'], 'mvt' => ['mouvements', 'mvt'], 'alim' => ['alimentation', 'alim'],
              'mens' => ['mensurations', 'mens']];
 if (!isset($tables[$type])) redirect('index.php');
-if (!peut_saisir($type)) { flash('Votre rôle ne permet pas cette saisie.', 'danger'); redirect('animal.php?id=' . (int)($_POST['animal_id'] ?? 0)); }
+if (!(($_POST['op'] ?? '') === 'del' ? peut_supprimer($type) : peut_saisir($type))) {
+    flash('Votre profil ne permet pas cette ' . (($_POST['op'] ?? '') === 'del' ? 'suppression' : 'saisie') . '.', 'danger');
+    redirect('animal.php?id=' . (int)($_POST['animal_id'] ?? 0));
+}
 [$table, $tab] = $tables[$type];
 $retour = "animal.php?id=$animalId&tab=$tab";
 
@@ -74,11 +77,12 @@ try {
             flash(TYPES_REPRO[$t] . ' enregistrée.' . ($prevue ? ' Mise bas prévue le ' . dfr($prevue) . '.' : ''));
             if ($t === 'mise_bas') {
                 $mb = mesures_post('mb_');
-                if (array_filter($mb, fn($v) => $v !== null)) {
+                if (array_filter($mb, fn($v) => $v !== null) && peut('mensurations.saisir')) {
                     enregistrer_mensuration($pdo, ['animal_id' => $animalId, 'type' => 'mise_bas', 'stade' => null, 'reproduction_id' => (int)$pdo->lastInsertId(),
                                                    'date_mesure' => $date] + $mb);
                 }
-                maj_indices_auto($pdo, $date); flash('Mise bas enregistrée. Créez maintenant la fiche du petit.'); redirect("animal_form.php?mere=$animalId"); }
+                maj_indices_auto($pdo, $date); if (!peut('animaux.creer')) { flash('Mise bas enregistrée.'); break; }
+                flash('Mise bas enregistrée. Créez maintenant la fiche du petit.'); redirect("animal_form.php?mere=$animalId"); }
             break;
 
         case 'sante':

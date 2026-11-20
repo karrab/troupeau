@@ -1,10 +1,11 @@
 <?php
 require 'includes/functions.php';
+exiger('pesees.voir');
 $titre = 'Pesées';
 
 // Saisie groupée (séance de pesée d'un lot)
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    exiger_role('admin', 'eleveur');
+    exiger('pesees.saisir');
     check_csrf();
     $date = post('date_pesee') ?? date('Y-m-d');
     $ins = $pdo->prepare('INSERT INTO pesees (animal_id,date_pesee,poids,note_etat_corporel,methode) VALUES (?,?,?,?,?)');
@@ -43,7 +44,7 @@ require 'includes/header.php';
     <strong class="me-auto">Séance de pesée</strong>
     <input type="date" name="date_pesee" value="<?= date('Y-m-d') ?>" class="form-control form-control-sm w-auto">
     <select name="methode" class="form-select form-select-sm w-auto"><option value="balance">Balance</option><option value="ruban">Ruban</option><option value="estimation">Estimation</option></select>
-    <?php if (peut_saisir()): ?><button class="btn btn-primary btn-sm"><i class="bi bi-save"></i> Enregistrer la séance</button><?php endif; ?>
+    <?php if (peut('pesees.saisir')): ?><button class="btn btn-primary btn-sm"><i class="bi bi-save"></i> Enregistrer la séance</button><?php endif; ?>
   </div>
   <div class="table-responsive"><table class="table table-sm table-hover mb-0">
     <thead><tr><th>Animal</th><th>Catégorie</th><th>Âge</th><th>Lot</th><th class="text-end">Avant-dernier</th><th class="text-end">Dernier</th><th class="text-end">GMQ récent</th><th style="width:120px">Nouveau poids</th><th style="width:90px">NEC</th></tr></thead>

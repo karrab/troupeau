@@ -14,8 +14,8 @@ require __DIR__ . '/../includes/functions.php';
 $email = mb_strtolower(trim($argv[1] ?? ''));
 if ($email === '') {
     echo "Usage : php outils/reinitialiser_mot_de_passe.php adresse@exemple.fr\n\nComptes existants :\n";
-    foreach ($pdo->query('SELECT email, role, actif FROM utilisateurs ORDER BY role, email') as $u)
-        echo '  - ' . $u['email'] . ' (' . ROLES[$u['role']][0] . ($u['actif'] ? '' : ', désactivé') . ")\n";
+    foreach ($pdo->query('SELECT u.email, u.actif, p.nom profil FROM utilisateurs u LEFT JOIN profils p ON p.id=u.profil_id ORDER BY p.systeme DESC, u.email') as $u)
+        echo '  - ' . $u['email'] . ' (' . ($u['profil'] ?? 'sans profil') . ($u['actif'] ? '' : ', désactivé') . ")\n";
     exit(1);
 }
 $st = $pdo->prepare('SELECT id FROM utilisateurs WHERE email=?'); $st->execute([$email]);

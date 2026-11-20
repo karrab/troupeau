@@ -1,12 +1,14 @@
 <?php
 require 'includes/functions.php';
-exiger_role('admin');
+exiger('parametres.gerer', 'indices.configurer');
 $titre = 'Paramètres';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     check_csrf();
     try {
-        switch ($_POST['action'] ?? '') {
+        $action = $_POST['action'] ?? '';
+        exiger(in_array($action, ['del_indice', 'actif_indice', 'campagne'], true) ? 'indices.configurer' : 'parametres.gerer');
+        switch ($action) {
             case 'espece':
                 $pdo->prepare('INSERT INTO especes (nom, gestation_jours) VALUES (?,?)')->execute([post('nom'), (int)post('gestation_jours') ?: 150]); break;
             case 'gestation':
@@ -64,6 +66,7 @@ $delBtn = fn($action, $id) => '<form method="post" class="d-inline" onsubmit="re
 require 'includes/header.php';
 ?>
 <h1 class="h3 mb-4">Paramètres</h1>
+<?php if (peut('parametres.gerer')): ?>
 <div class="row g-3">
   <div class="col-lg-4"><div class="card p-3 h-100">
     <h2 class="h6">Espèces et durée de gestation</h2>
@@ -113,6 +116,8 @@ require 'includes/header.php';
   </form>
 </div>
 
+<?php endif; ?>
+<?php if (peut('indices.configurer')): ?>
 <div class="card mt-3" id="indices">
   <div class="card-header bg-white d-flex flex-wrap justify-content-between align-items-center gap-2">
     <span class="fw-semibold"><i class="bi bi-calculator"></i> Indices de productivité : formules et interprétation</span>
@@ -148,4 +153,5 @@ require 'includes/header.php';
     <?php endforeach; if (!$listeIndices): ?><tr><td colspan="8" class="text-center text-muted">Aucun indice défini.</td></tr><?php endif; ?></tbody>
   </table></div>
 </div>
+<?php endif; ?>
 <?php require 'includes/footer.php';

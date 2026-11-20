@@ -1,65 +1,20 @@
 <?php
 require 'includes/functions.php';
-exiger_role('admin');
+exiger('utilisateurs.gerer', 'profils.gerer');
 $titre = 'Utilisateurs';
-$moi = utilisateur();
-
-/** Mot de passe provisoire lisible (sans caractères ambigus) */
-function mdp_provisoire(): string
-{
-    $l = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ'; $c = '23456789'; $m = '';
-    for ($i = 0; $i < 8; $i++) $m .= $l[random_int(0, strlen($l) - 1)];
-    return $m . $c[random_int(0, 7)] . $c[random_int(0, 7)];
-}
-$nbAdmins = fn() => (int)$pdo->query("SELECT COUNT(*) FROM utilisateurs WHERE role='admin' AND actif=1")->fetchColumn();
-$cible = function (int $id) use ($pdo) { $st = $pdo->prepare('SELECT * FROM utilisateurs WHERE id=?'); $st->execute([$id]); return $st->fetch(); };
-$provisoire = null;
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    exiger('utilisateurs.gerer');
     check_csrf();
-    $id = (int)($_POST['id'] ?? 0);
-    $u = $id ? $cible($id) : null;
     try {
-        switch ($_POST['action'] ?? '') {
-            case 'creer':
-                $nom = trim((string)post('nom')); $email = mb_strtolower(trim((string)post('email'))); $role = post('role');
-                if ($nom === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('Indiquez un nom et une adresse e-mail valide.');
-                if (!isset(ROLES[$role])) throw new InvalidArgumentException('Rôle invalide.');
-                $provisoire = mdp_provisoire();
-                $pdo->prepare('INSERT INTO utilisateurs (nom, email, mot_de_passe, role, doit_changer_mdp) VALUES (?,?,?,?,1)')
-                    ->execute([$nom, $email, password_hash($provisoire, PASSWORD_DEFAULT), $role]);
-                $_SESSION['provisoire'] = [$email, $provisoire];
-                flash("Compte créé pour $nom.");
-                break;
-            case 'role':
-                if (!$u || !isset(ROLES[post('role')])) break;
-                if ($u['role'] === 'admin' && post('role') !== 'admin' && $nbAdmins() <= 1) throw new InvalidArgumentException('Il doit rester au moins un administrateur actif.');
-                $pdo->prepare('UPDATE utilisateurs SET role=? WHERE id=?')->execute([post('role'), $id]);
-                flash('Rôle de ' . $u['nom'] . ' : ' . ROLES[post('role')][0] . '.');
-                break;
-            case 'actif':
-                if (!$u) break;
-                if ($id === $moi['id']) throw new InvalidArgumentException('Vous ne pouvez pas désactiver votre propre compte.');
-                if ($u['actif'] && $u['role'] === 'admin' && $nbAdmins() <= 1) throw new InvalidArgumentException('Il doit rester au moins un administrateur actif.');
-                $pdo->prepare('UPDATE utilisateurs SET actif=1-actif WHERE id=?')->execute([$id]);
-                flash('Compte de ' . $u['nom'] . ($u['actif'] ? ' désactivé.' : ' réactivé.'), $u['actif'] ? 'warning' : 'success');
-                break;
-            case 'reinitialiser':
-                if (!$u) break;
-                $provisoire = mdp_provisoire();
-                $pdo->prepare('UPDATE utilisateurs SET mot_de_passe=?, doit_changer_mdp=1, echecs=0, bloque_jusqua=NULL WHERE id=?')
-                    ->execute([password_hash($provisoire, PASSWORD_DEFAULT), $id]);
-                $_SESSION['provisoire'] = [$u['email'], $provisoire];
-                flash('Mot de passe de ' . $u['nom'] . ' réinitialisé.');
-                break;
-            case 'supprimer':
-                if (!$u) break;
-                if ($id === $moi['id']) throw new InvalidArgumentException('Vous ne pouvez pas supprimer votre propre compte.');
-                if ($u['role'] === 'admin' && $u['actif'] && $nbAdmins() <= 1) throw new InvalidArgumentException('Il doit rester au moins un administrateur actif.');
-                $pdo->prepare('DELETE FROM utilisateurs WHERE id=?')->execute([$id]);
-                flash('Compte de ' . $u['nom'] . ' supprimé.', 'warning');
-                break;
-        }
+        $nom = trim((string)post('nom')); $email = mb_strtolower(trim((string)post('email'))); $profil = (int)post('profil_id');
+        if ($nom === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) throw new InvalidArgumentException('Indiquez un nom et une adresse e-mail valide.');
+        if (!isset(profils_attribuables($pdo)[$profil])) throw new InvalidArgumentException('Profil non autorisé.');
+        $provisoire = mdp_provisoire();
+        $pdo->prepare('INSERT INTO utilisateurs (nom, email, mot_de_passe, profil_id, telephone, fonction, doit_changer_mdp) VALUES (?,?,?,?,?,?,1)')
+            ->execute([$nom, $email, password_hash($provisoire, PASSWORD_DEFAULT), $profil, post('telephone'), post('fonction')]);
+        $_SESSION['provisoire'] = [$email, $provisoire];
+        flash("Compte créé pour $nom.");
     } catch (InvalidArgumentException $e) {
         flash($e->getMessage(), 'danger');
     } catch (PDOException $e) {
@@ -68,16 +23,24 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     redirect('utilisateurs.php');
 }
 
-// Mot de passe provisoire : affiché une seule fois
 $provisoire = $_SESSION['provisoire'] ?? null; unset($_SESSION['provisoire']);
-$liste = $pdo->query('SELECT * FROM utilisateurs ORDER BY actif DESC, role, nom')->fetchAll();
-$bouton = fn(string $action, int $id, string $html, string $classe, string $confirm = '') =>
-    '<form method="post" class="d-inline"' . ($confirm ? ' onsubmit="return confirm(\'' . e($confirm) . '\')"' : '') . '>' . csrf_field()
-    . '<input type="hidden" name="action" value="' . $action . '"><input type="hidden" name="id" value="' . $id . '">'
-    . '<button class="btn btn-sm ' . $classe . '">' . $html . '</button></form>';
+$filtre = (int)($_GET['profil'] ?? 0);
+$liste = $pdo->query('SELECT u.*, p.nom profil_nom, p.couleur profil_couleur FROM utilisateurs u LEFT JOIN profils p ON p.id=u.profil_id
+    ORDER BY u.actif DESC, p.systeme DESC, u.nom')->fetchAll();
+if ($filtre) $liste = array_filter($liste, fn($u) => (int)$u['profil_id'] === $filtre);
+$profils = profils($pdo);
+$journal = $pdo->query('SELECT j.*, u.nom FROM journal_connexions j LEFT JOIN utilisateurs u ON u.id=j.utilisateur_id ORDER BY j.id DESC LIMIT 25')->fetchAll();
+$moi = utilisateur();
 require 'includes/header.php';
 ?>
-<h1 class="h3 mb-4">Utilisateurs</h1>
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+  <h1 class="h3 mb-0">Utilisateurs</h1>
+  <div class="d-flex gap-2">
+    <form><select name="profil" class="form-select form-select-sm" onchange="this.form.submit()" aria-label="Filtrer par profil"><option value="">Tous les profils</option>
+      <?php foreach ($profils as $p): ?><option value="<?= $p['id'] ?>" <?= $filtre === $p['id'] ? 'selected' : '' ?>><?= e($p['nom']) ?> (<?= $p['nb_utilisateurs'] ?>)</option><?php endforeach; ?></select></form>
+    <?php if (peut('profils.gerer')): ?><a href="profils.php" class="btn btn-outline-primary btn-sm text-nowrap"><i class="bi bi-shield-lock"></i> Profils et permissions</a><?php endif; ?>
+  </div>
+</div>
 <?php if ($provisoire): ?>
 <div class="alert alert-warning">
   <strong><i class="bi bi-key"></i> Mot de passe provisoire</strong> pour <strong><?= e($provisoire[0]) ?></strong> :
@@ -86,44 +49,58 @@ require 'includes/header.php';
 </div>
 <?php endif; ?>
 <div class="row g-3">
-  <div class="col-xl-8"><div class="card">
-    <div class="table-responsive"><table class="table table-sm table-hover mb-0 align-middle">
-      <thead><tr><th>Nom</th><th>Identifiant</th><th>Rôle</th><th>Dernière connexion</th><th>État</th><th></th></tr></thead>
-      <tbody><?php foreach ($liste as $x): $soi = (int)$x['id'] === $moi['id']; ?>
+  <div class="col-xl-8">
+    <div class="card"><div class="table-responsive"><table class="table table-sm table-hover mb-0 align-middle">
+      <thead><tr><th>Utilisateur</th><th>Fonction</th><th>Profil</th><th>Dernière connexion</th><th>État</th></tr></thead>
+      <tbody><?php foreach ($liste as $x): ?>
         <tr class="<?= $x['actif'] ? '' : 'text-muted' ?>">
-          <td class="fw-semibold"><?= e($x['nom']) ?><?= $soi ? ' <span class="badge text-bg-light">vous</span>' : '' ?></td>
-          <td><?= e($x['email']) ?></td>
-          <td><form method="post" class="d-inline"><?= csrf_field() ?><input type="hidden" name="action" value="role"><input type="hidden" name="id" value="<?= $x['id'] ?>">
-            <select name="role" class="form-select form-select-sm w-auto" onchange="this.form.submit()">
-              <?php foreach (ROLES as $k => [$l]): ?><option value="<?= $k ?>" <?= $x['role'] === $k ? 'selected' : '' ?>><?= $l ?></option><?php endforeach; ?></select></form></td>
+          <td><div class="d-flex align-items-center gap-2"><?= avatar($x, 32) ?><div>
+            <a href="utilisateur.php?id=<?= $x['id'] ?>" class="fw-semibold"><?= e($x['nom']) ?></a><?= (int)$x['id'] === $moi['id'] ? ' <span class="badge text-bg-light">vous</span>' : '' ?>
+            <div class="small text-muted"><?= e($x['email']) ?><?= $x['telephone'] ? ' · ' . e($x['telephone']) : '' ?></div></div></div></td>
+          <td class="small"><?= e($x['fonction'] ?: '—') ?></td>
+          <td><?= badge_profil($x) ?></td>
           <td class="small"><?= $x['derniere_connexion'] ? date('d/m/Y H:i', strtotime($x['derniere_connexion'])) : 'jamais' ?></td>
           <td><?= $x['actif'] ? '<span class="badge text-bg-success">Actif</span>' : '<span class="badge text-bg-secondary">Désactivé</span>' ?>
             <?= $x['doit_changer_mdp'] ? '<span class="badge text-bg-warning">Mot de passe provisoire</span>' : '' ?>
             <?= $x['bloque_jusqua'] && $x['bloque_jusqua'] > date('Y-m-d H:i:s') ? '<span class="badge text-bg-danger">Bloqué</span>' : '' ?></td>
-          <td class="text-end text-nowrap">
-            <?= $bouton('reinitialiser', (int)$x['id'], '<i class="bi bi-key"></i>', 'btn-link p-0 me-2', 'Générer un nouveau mot de passe provisoire pour ' . $x['nom'] . ' ?') ?>
-            <?php if (!$soi): ?>
-              <?= $bouton('actif', (int)$x['id'], '<i class="bi bi-toggle-' . ($x['actif'] ? 'on text-success' : 'off text-muted') . ' fs-5"></i>', 'btn-link p-0 me-2') ?>
-              <?= $bouton('supprimer', (int)$x['id'], '<i class="bi bi-trash"></i>', 'btn-link text-danger p-0', 'Supprimer définitivement le compte de ' . $x['nom'] . ' ?') ?>
-            <?php endif; ?></td>
         </tr>
-      <?php endforeach; ?></tbody>
+      <?php endforeach; if (!$liste): ?><tr><td colspan="5" class="text-center text-muted">Aucun utilisateur.</td></tr><?php endif; ?></tbody>
     </table></div></div>
-    <div class="card p-3 mt-3 small">
-      <h2 class="h6">Droits par rôle</h2>
-      <?php foreach (ROLES as $k => [$l, $c, $d]): ?><div class="mb-1"><span class="badge text-bg-<?= $c ?>"><?= $l ?></span> <?= e($d) ?></div><?php endforeach; ?>
+
+    <div class="card mt-3"><div class="card-header bg-white fw-semibold">Dernières connexions</div>
+      <div class="table-responsive" style="max-height:320px"><table class="table table-sm mb-0 small align-middle">
+        <thead><tr><th>Date</th><th>Compte</th><th>Résultat</th><th>Adresse IP</th></tr></thead>
+        <tbody><?php foreach ($journal as $j): ?><tr>
+          <td class="text-nowrap"><?= date('d/m/Y H:i', strtotime($j['date_connexion'])) ?></td>
+          <td><?= e($j['nom'] ?? $j['email']) ?></td>
+          <td><?= $j['succes'] ? '<span class="text-success"><i class="bi bi-check-circle"></i> réussie</span>' : '<span class="text-danger"><i class="bi bi-x-circle"></i> ' . e($j['motif']) . '</span>' ?></td>
+          <td class="text-muted"><?= e($j['ip']) ?></td></tr><?php endforeach; ?>
+        <?php if (!$journal): ?><tr><td colspan="4" class="text-muted text-center">Aucune connexion enregistrée.</td></tr><?php endif; ?></tbody>
+      </table></div></div>
+  </div>
+  <div class="col-xl-4">
+    <?php if (peut('utilisateurs.gerer')): ?>
+    <div class="card p-3 mb-3">
+      <h2 class="h6">Nouvel utilisateur</h2>
+      <form method="post"><?= csrf_field() ?>
+        <div class="mb-2"><label class="form-label small" for="nom">Nom</label><input id="nom" name="nom" class="form-control form-control-sm" required></div>
+        <div class="mb-2"><label class="form-label small" for="email">Adresse e-mail (identifiant)</label><input id="email" type="email" name="email" class="form-control form-control-sm" required></div>
+        <div class="row g-2 mb-2">
+          <div class="col-6"><label class="form-label small" for="tel">Téléphone</label><input id="tel" name="telephone" class="form-control form-control-sm"></div>
+          <div class="col-6"><label class="form-label small" for="fonction">Fonction</label><input id="fonction" name="fonction" class="form-control form-control-sm" placeholder="Berger, vétérinaire…"></div>
+        </div>
+        <div class="mb-3"><label class="form-label small" for="profil_id">Profil</label><select id="profil_id" name="profil_id" class="form-select form-select-sm">
+          <?php foreach (profils_attribuables($pdo) as $p): ?><option value="<?= $p['id'] ?>" <?= $p['code'] === 'eleveur' ? 'selected' : '' ?>><?= e($p['nom']) ?></option><?php endforeach; ?></select></div>
+        <button class="btn btn-primary btn-sm w-100"><i class="bi bi-person-plus"></i> Créer le compte</button>
+        <div class="form-text">Un mot de passe provisoire est généré ; il devra être changé à la première connexion.</div>
+      </form>
+    </div>
+    <?php endif; ?>
+    <div class="card p-3 small">
+      <h2 class="h6">Profils</h2>
+      <?php foreach ($profils as $p): ?><div class="mb-2"><?= badge_profil(['profil_nom' => $p['nom'], 'profil_couleur' => $p['couleur']]) ?>
+        <span class="text-muted"><?= $p['systeme'] ? 'toutes les permissions' : count($p['permissions']) . ' permission(s)' ?></span><br><?= e($p['description']) ?></div><?php endforeach; ?>
     </div>
   </div>
-  <div class="col-xl-4"><div class="card p-3">
-    <h2 class="h6">Nouvel utilisateur</h2>
-    <form method="post"><?= csrf_field() ?><input type="hidden" name="action" value="creer">
-      <div class="mb-2"><label class="form-label small" for="nom">Nom</label><input id="nom" name="nom" class="form-control form-control-sm" required></div>
-      <div class="mb-2"><label class="form-label small" for="email">Adresse e-mail (identifiant)</label><input id="email" type="email" name="email" class="form-control form-control-sm" required></div>
-      <div class="mb-3"><label class="form-label small" for="role">Rôle</label><select id="role" name="role" class="form-select form-select-sm">
-        <?php foreach (ROLES as $k => [$l]): ?><option value="<?= $k ?>" <?= $k === 'eleveur' ? 'selected' : '' ?>><?= $l ?></option><?php endforeach; ?></select></div>
-      <button class="btn btn-primary btn-sm w-100"><i class="bi bi-person-plus"></i> Créer le compte</button>
-      <div class="form-text">Un mot de passe provisoire est généré ; il devra être changé à la première connexion.</div>
-    </form>
-  </div></div>
 </div>
 <?php require 'includes/footer.php';

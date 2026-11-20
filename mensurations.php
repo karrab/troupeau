@@ -1,5 +1,6 @@
 <?php
 require 'includes/functions.php';
+exiger('mensurations.voir');
 $titre = 'Mensurations';
 $libs = libelles_mesures($pdo); $unite = unite_mesures($pdo);
 
@@ -10,7 +11,7 @@ $url = fn(array $p = []) => 'mensurations.php?' . http_build_query(array_filter(
 
 // ---------- Enregistrement d'une séance ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    exiger_role('admin', 'eleveur');
+    exiger('mensurations.saisir');
     check_csrf();
     $date = post('date_mesure'); $st = (int)post('stade');
     $n = 0; $erreurs = [];
@@ -73,7 +74,7 @@ require 'includes/header.php';
       <input type="number" name="stade" min="0" max="999" value="<?= $stade ?>" class="form-control" style="width:70px"
         onchange="location.href='<?= e($url(['stade' => null])) ?>&stade='+this.value"></div>
     <input type="date" name="date_mesure" value="<?= date('Y-m-d') ?>" class="form-control form-control-sm w-auto" required>
-    <?php if (peut_saisir()): ?><button class="btn btn-primary btn-sm"><i class="bi bi-save"></i> Enregistrer W<?= $stade ?></button><?php endif; ?>
+    <?php if (peut('mensurations.saisir')): ?><button class="btn btn-primary btn-sm"><i class="bi bi-save"></i> Enregistrer W<?= $stade ?></button><?php endif; ?>
   </div>
   <div class="table-responsive"><table class="table table-sm table-hover mb-0 align-middle">
     <thead><tr><th>Animal</th><th>Âge</th><th>Lot</th><th class="text-center">Dernier stade</th><th style="width:95px">Poids (kg)</th>

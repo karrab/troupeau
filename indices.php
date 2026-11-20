@@ -1,5 +1,6 @@
 <?php
 require 'includes/functions.php';
+exiger('indices.voir');
 $titre = 'Indices de productivité';
 
 $campagnes = campagnes_indices($pdo);
@@ -15,7 +16,7 @@ $url = fn(array $p = []) => 'indices.php?' . http_build_query(array_filter(array
 
 // ---------- Calcul / recalcul ----------
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    exiger_role('admin', 'eleveur');
+    exiger('indices.calculer');
     check_csrf();
     try {
         $t = microtime(true);
@@ -82,6 +83,7 @@ $perimes = array_filter($tous, fn($i) => $calcule && $i['updated_at'] > $calcule
 
 // ---------- Export CSV (vue SQL v_indices_resultats) ----------
 if (($_GET['export'] ?? '') === 'csv') {
+    exiger('indices.exporter');
     header('Content-Type: text/csv; charset=utf-8');
     header('Content-Disposition: attachment; filename="indices_' . $niveau . '_' . libelle_campagne($campagne) . '.csv"');
     $out = fopen('php://output', 'w');
@@ -110,9 +112,9 @@ require 'includes/header.php';
   <div><h1 class="h3 mb-0">Indices de productivité</h1>
     <div class="small text-muted">Calculés automatiquement à partir des événements enregistrés · dernier calcul <?= $calcule ? date('d/m/Y H:i', strtotime($calcule)) : '—' ?></div></div>
   <div class="d-flex flex-wrap gap-2 no-print">
-    <?php if (a_role('admin')): ?><a href="parametres.php#indices" class="btn btn-outline-secondary btn-sm"><i class="bi bi-sliders"></i> Formules et seuils</a><?php endif; ?>
-    <a href="<?= e($url(['export' => 'csv'])) ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-filetype-csv"></i> Export CSV</a>
-    <?php if (peut_saisir()): ?><form method="post" class="d-inline"><?= csrf_field() ?><input type="hidden" name="campagne" value="<?= $campagne ?>">
+    <?php if (peut('indices.configurer')): ?><a href="parametres.php#indices" class="btn btn-outline-secondary btn-sm"><i class="bi bi-sliders"></i> Formules et seuils</a><?php endif; ?>
+    <?php if (peut('indices.exporter')): ?><a href="<?= e($url(['export' => 'csv'])) ?>" class="btn btn-outline-secondary btn-sm"><i class="bi bi-filetype-csv"></i> Export CSV</a><?php endif; ?>
+    <?php if (peut('indices.calculer')): ?><form method="post" class="d-inline"><?= csrf_field() ?><input type="hidden" name="campagne" value="<?= $campagne ?>">
       <button class="btn btn-primary btn-sm"><i class="bi bi-calculator"></i> Calculer <?= e(libelle_campagne($campagne)) ?></button></form>
     <form method="post" class="d-inline"><?= csrf_field() ?><input type="hidden" name="portee" value="toutes">
       <button class="btn btn-outline-primary btn-sm"><i class="bi bi-arrow-repeat"></i> Tout recalculer</button></form><?php endif; ?>

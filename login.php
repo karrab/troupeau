@@ -21,7 +21,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             // Verrou : un seul compte créé par ce formulaire, même en cas de double envoi
             $pdo->beginTransaction();
             if ((int)$pdo->query('SELECT COUNT(*) FROM utilisateurs FOR UPDATE')->fetchColumn()) { $pdo->rollBack(); redirect('login.php'); }
-            $pdo->prepare("INSERT INTO utilisateurs (nom, email, mot_de_passe, role) VALUES (?,?,?,'admin')")->execute([$nom, $email, password_hash($mdp, PASSWORD_DEFAULT)]);
+            $pdo->prepare("INSERT INTO utilisateurs (nom, email, mot_de_passe, profil_id) VALUES (?,?,?,(SELECT id FROM profils WHERE code='admin'))")
+                ->execute([$nom, $email, password_hash($mdp, PASSWORD_DEFAULT)]);
             $pdo->commit();
             connecter($pdo, $email, $mdp);
             flash('Compte administrateur créé. Bienvenue ' . $nom . ' !');
@@ -30,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         usleep(random_int(200000, 400000)); // ralentit les essais automatisés
         $erreur = connecter($pdo, $email, $mdp);
-        if (!$erreur) redirect($retour);
+        if (!$erreur) redirect($retour === 'index.php' && !peut('tableau_bord.voir') ? (peut('animaux.voir') ? 'animaux.php' : 'mon_compte.php') : $retour);
     }
 }
 ?>
