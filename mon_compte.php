@@ -36,6 +36,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if (password_verify($nouveau, $u['mot_de_passe'])) throw new InvalidArgumentException('Le nouveau mot de passe doit être différent de l\'actuel.');
             if ($m = erreur_mot_de_passe($nouveau, (string)($_POST['confirmation'] ?? ''))) throw new InvalidArgumentException($m);
             $pdo->prepare('UPDATE utilisateurs SET mot_de_passe=?, doit_changer_mdp=0 WHERE id=?')->execute([password_hash($nouveau, PASSWORD_DEFAULT), $moi['id']]);
+            oublier_jetons($pdo, (int)$moi['id']); // « Se souvenir de moi » révoqué sur tous les appareils
             $_SESSION['utilisateur']['doit_changer_mdp'] = 0;
             session_regenerate_id(true);
             flash('Mot de passe modifié.');

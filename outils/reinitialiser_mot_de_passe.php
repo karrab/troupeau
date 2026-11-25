@@ -23,4 +23,5 @@ if (!$id = $st->fetchColumn()) { fwrite(STDERR, "Aucun compte « $email ».\n");
 $mdp = substr(str_replace(['+', '/', '='], '', base64_encode(random_bytes(12))), 0, 10) . random_int(10, 99);
 $pdo->prepare('UPDATE utilisateurs SET mot_de_passe=?, doit_changer_mdp=1, actif=1, echecs=0, bloque_jusqua=NULL WHERE id=?')
     ->execute([password_hash($mdp, PASSWORD_DEFAULT), $id]);
+$pdo->prepare('DELETE FROM jetons_connexion WHERE utilisateur_id=?')->execute([$id]);
 echo "Mot de passe provisoire pour $email : $mdp\n(à changer à la prochaine connexion)\n";

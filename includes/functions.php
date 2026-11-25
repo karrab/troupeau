@@ -1,5 +1,7 @@
 <?php
 declare(strict_types=1);
+// Les sessions ne doivent pas être effacées avant la limite d'inactivité de 2 h (SESSION_INACTIVITE)
+ini_set('session.gc_maxlifetime', '7200');
 session_set_cookie_params(['lifetime' => 0, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax',
                            'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off']);
 session_start();

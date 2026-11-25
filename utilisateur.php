@@ -27,11 +27,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!empty($_FILES['photo']['name'])) $photo = enregistrer_photo_utilisateur($_FILES['photo'], $u['photo']);
                 $pdo->prepare('UPDATE utilisateurs SET nom=?, email=?, telephone=?, fonction=?, profil_id=?, notes=?, actif=?, photo=? WHERE id=?')
                     ->execute([$nom, $email, post('telephone'), post('fonction'), $profil, post('notes'), $actif, $photo, $id]);
+                if (!$actif) oublier_jetons($pdo, $id);
                 flash('Compte enregistré.');
                 break;
             case 'reinitialiser':
                 $provisoire = mdp_provisoire();
                 $pdo->prepare('UPDATE utilisateurs SET mot_de_passe=?, doit_changer_mdp=1, echecs=0, bloque_jusqua=NULL WHERE id=?')->execute([password_hash($provisoire, PASSWORD_DEFAULT), $id]);
+                oublier_jetons($pdo, $id);
                 $_SESSION['provisoire'] = [$u['email'], $provisoire];
                 flash('Mot de passe réinitialisé' . ($u['bloque_jusqua'] ? ' et compte débloqué' : '') . '.');
                 break;

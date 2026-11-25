@@ -73,6 +73,8 @@ const MDP_LONGUEUR_MIN  = 8;
 const ECHECS_MAX        = 5;
 const BLOCAGE_MINUTES   = 15;
 const SESSION_INACTIVITE = 7200; // secondes
+const SOUVENIR_JOURS     = 30;   // « Se souvenir de moi »
+const SOUVENIR_COOKIE    = 'gestroupeau_souvenir';
 
 function liste_permissions(): array { $l = []; foreach (PERMISSIONS as $g) $l += $g; return $l; }
 
@@ -218,21 +220,78 @@ function deconnecter(): void
     session_regenerate_id(true);
 }
 
+// ---------------------------------------------------------------------
+//  « Se souvenir de moi » : jeton aléatoire (sélecteur + validateur).
+//  Seule l'empreinte SHA-256 du validateur est stockée ; le jeton est
+//  renouvelé à chaque utilisation et révoqué à la déconnexion, au
+//  changement de mot de passe et à la désactivation du compte.
+// ---------------------------------------------------------------------
+function poser_cookie_souvenir(string $valeur, int $expire): void
+{
+    setcookie(SOUVENIR_COOKIE, $valeur, ['expires' => $expire, 'path' => '/', 'httponly' => true, 'samesite' => 'Lax',
+                                         'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off']);
+}
+
+function creer_jeton_souvenir(PDO $pdo, int $uid): void
+{
+    $selecteur = bin2hex(random_bytes(12)); $validateur = bin2hex(random_bytes(32));
+    $expire = time() + SOUVENIR_JOURS * 86400;
+    $pdo->prepare('INSERT INTO jetons_connexion (utilisateur_id, selecteur, validateur_hash, expire_le, ip, navigateur) VALUES (?,?,?,?,?,?)')
+        ->execute([$uid, $selecteur, hash('sha256', $validateur), date('Y-m-d H:i:s', $expire), $_SERVER['REMOTE_ADDR'] ?? null,
+                   mb_substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 255) ?: null]);
+    poser_cookie_souvenir("$selecteur:$validateur", $expire);
+}
+
+/** Supprime le jeton de ce navigateur (ou tous ceux d'un utilisateur) et le cookie */
+function oublier_jetons(PDO $pdo, ?int $uid = null): void
+{
+    try {
+        if ($uid !== null) $pdo->prepare('DELETE FROM jetons_connexion WHERE utilisateur_id=?')->execute([$uid]);
+        elseif (preg_match('/^([a-f0-9]{24}):/', $_COOKIE[SOUVENIR_COOKIE] ?? '', $m)) $pdo->prepare('DELETE FROM jetons_connexion WHERE selecteur=?')->execute([$m[1]]);
+    } catch (PDOException) {}
+    if ($uid === null || (int)(utilisateur()['id'] ?? 0) === $uid) { poser_cookie_souvenir('', time() - 3600); unset($_COOKIE[SOUVENIR_COOKIE]); }
+}
+
+/** Reconnecte automatiquement à partir du cookie « Se souvenir de moi » */
+function connexion_par_jeton(PDO $pdo): bool
+{
+    if (!preg_match('/^([a-f0-9]{24}):([a-f0-9]{64})$/', $_COOKIE[SOUVENIR_COOKIE] ?? '', $m)) return false;
+    try {
+        $st = $pdo->prepare('SELECT j.*, u.email FROM jetons_connexion j JOIN utilisateurs u ON u.id=j.utilisateur_id WHERE j.selecteur=?');
+        $st->execute([$m[1]]);
+        $j = $st->fetch();
+        if (!$j || $j['expire_le'] < date('Y-m-d H:i:s')) { oublier_jetons($pdo); return false; }
+        if (!hash_equals($j['validateur_hash'], hash('sha256', $m[2]))) {
+            // Sélecteur connu mais validateur faux : jeton probablement volé, tous les jetons du compte sont révoqués
+            oublier_jetons($pdo, (int)$j['utilisateur_id']); poser_cookie_souvenir('', time() - 3600);
+            journaliser($pdo, (int)$j['utilisateur_id'], $j['email'], false, 'jeton « se souvenir » invalide');
+            return false;
+        }
+        $pdo->prepare('DELETE FROM jetons_connexion WHERE id=?')->execute([$j['id']]);
+        $st = $pdo->prepare('SELECT * FROM utilisateurs WHERE id=? AND actif=1'); $st->execute([$j['utilisateur_id']]);
+        if (!$u = $st->fetch()) { poser_cookie_souvenir('', time() - 3600); return false; }
+        ouvrir_session($pdo, $u);
+        $_SESSION['souvenir'] = true;
+        creer_jeton_souvenir($pdo, (int)$u['id']);
+        journaliser($pdo, (int)$u['id'], $u['email'], true, 'reconnexion automatique');
+        return true;
+    } catch (PDOException) { return false; }
+}
+
 /** Contrôle d'accès exécuté au chargement de chaque page */
 function controle_acces(PDO $pdo): void
 {
     if (PHP_SAPI === 'cli' || defined('PAGE_PUBLIQUE')) return;
     $retour = 'login.php?retour=' . rawurlencode(basename($_SERVER['REQUEST_URI'] ?? 'index.php'));
-    if (!utilisateur()) redirect($retour);
-    if (time() - ($_SESSION['activite'] ?? 0) > SESSION_INACTIVITE) {
+    if (utilisateur() && time() - ($_SESSION['activite'] ?? 0) > SESSION_INACTIVITE) {
         deconnecter();
-        flash('Session expirée après inactivité. Reconnectez-vous.', 'warning');
-        redirect($retour);
+        if (!connexion_par_jeton($pdo)) { flash('Session expirée après inactivité. Reconnectez-vous.', 'warning'); redirect($retour); }
     }
+    if (!utilisateur() && !connexion_par_jeton($pdo)) redirect($retour);
     $_SESSION['activite'] = time();
     // Compte désactivé ou supprimé entre-temps ; profil et permissions rechargés à chaque page
     $u = charger_utilisateur($pdo, (int)utilisateur()['id']);
-    if (!$u || !$u['actif']) { deconnecter(); flash('Votre compte n\'est plus actif.', 'danger'); redirect('login.php'); }
+    if (!$u || !$u['actif']) { oublier_jetons($pdo); deconnecter(); flash('Votre compte n\'est plus actif.', 'danger'); redirect('login.php'); }
     $_SESSION['utilisateur'] = $u;
     // Mot de passe provisoire : changement obligatoire avant toute autre page
     if ($u['doit_changer_mdp'] && basename($_SERVER['PHP_SELF']) !== 'mon_compte.php' && basename($_SERVER['PHP_SELF']) !== 'logout.php') {

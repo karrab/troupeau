@@ -3,7 +3,7 @@ const PAGE_PUBLIQUE = true;
 require 'includes/functions.php';
 
 $retour = preg_match('/^[a-z_]+\.php(\?[^\s<>"]*)?$/i', $_GET['retour'] ?? '') ? $_GET['retour'] : 'index.php';
-if (utilisateur()) redirect($retour);
+if (utilisateur() || connexion_par_jeton($pdo)) redirect($retour);
 
 // Première installation : aucun utilisateur => création du compte administrateur
 $installation = !(int)$pdo->query('SELECT COUNT(*) FROM utilisateurs')->fetchColumn();
@@ -31,6 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         usleep(random_int(200000, 400000)); // ralentit les essais automatisés
         $erreur = connecter($pdo, $email, $mdp);
+        if (!$erreur && !empty($_POST['souvenir'])) { creer_jeton_souvenir($pdo, (int)utilisateur()['id']); $_SESSION['souvenir'] = true; }
         if (!$erreur) redirect($retour === 'index.php' && !peut('tableau_bord.voir') ? (peut('animaux.voir') ? 'animaux.php' : 'mon_compte.php') : $retour);
     }
 }
@@ -46,43 +47,101 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <link href="assets/style.css" rel="stylesheet">
 </head>
 <body class="page-connexion">
-<main class="d-flex align-items-center justify-content-center min-vh-100 p-3">
-  <div class="card p-4 shadow-sm" style="width:100%;max-width:400px">
-    <div class="text-center mb-3">
-      <div class="logo-connexion mb-2"><i class="bi bi-flower3"></i></div>
-      <h1 class="h4 mb-0"><?= APP_NAME ?></h1>
-      <div class="text-muted small">Gestion et suivi des troupeaux</div>
-    </div>
-    <?= show_flash() ?>
-    <?php if ($erreur): ?><div class="alert alert-danger py-2 small"><?= e($erreur) ?></div><?php endif; ?>
+<div class="row g-0 min-vh-100">
 
-    <?php if ($installation): ?>
-      <div class="alert alert-info small py-2"><strong>Première connexion.</strong> Créez le compte administrateur de l'application.</div>
-      <form method="post" autocomplete="off"><?= csrf_field() ?>
-        <div class="mb-2"><label class="form-label small" for="nom">Nom</label><input id="nom" name="nom" class="form-control" required value="<?= e($_POST['nom'] ?? '') ?>" autofocus></div>
-        <div class="mb-2"><label class="form-label small" for="email">Adresse e-mail (identifiant)</label><input id="email" type="email" name="email" class="form-control" required value="<?= e($email) ?>"></div>
-        <div class="mb-2"><label class="form-label small" for="mdp">Mot de passe</label><input id="mdp" type="password" name="mot_de_passe" class="form-control" required minlength="<?= MDP_LONGUEUR_MIN ?>" autocomplete="new-password">
-          <div class="form-text"><?= MDP_LONGUEUR_MIN ?> caractères minimum, avec au moins une lettre et un chiffre.</div></div>
-        <div class="mb-3"><label class="form-label small" for="conf">Confirmation</label><input id="conf" type="password" name="confirmation" class="form-control" required autocomplete="new-password"></div>
-        <button class="btn btn-primary w-100"><i class="bi bi-person-check"></i> Créer le compte administrateur</button>
+  <!-- Présentation -->
+  <aside class="col-lg-6 cx-presentation d-none d-lg-flex flex-column">
+    <div class="cx-colline cx-colline-1" aria-hidden="true"></div>
+    <div class="cx-colline cx-colline-2" aria-hidden="true"></div>
+    <div class="cx-marque"><i class="bi bi-flower3"></i> <?= APP_NAME ?></div>
+    <div class="my-auto">
+      <h2 class="cx-titre">Suivez votre troupeau,<br>simplement.</h2>
+      <p class="cx-accroche">Bovins, ovins et caprins : identité, pesées, contrôle laitier, reproduction et santé réunis au même endroit.</p>
+      <ul class="cx-atouts list-unstyled mb-0">
+        <li><span><i class="bi bi-graph-up"></i></span> GMQ et courbes de croissance automatiques</li>
+        <li><span><i class="bi bi-droplet-half"></i></span> Production laitière, TB/TP et alertes cellules</li>
+        <li><span><i class="bi bi-calendar-heart"></i></span> Mises bas prévues et suivi de la reproduction</li>
+        <li><span><i class="bi bi-shield-plus"></i></span> Traitements, rappels et délais d'attente</li>
+      </ul>
+    </div>
+    <div class="cx-pied">© <?= date('Y') ?> <?= APP_NAME ?> · Système d'information de suivi des troupeaux</div>
+  </aside>
+
+  <!-- Formulaire -->
+  <main class="col-lg-6 d-flex align-items-center justify-content-center p-3 py-5">
+    <div class="cx-carte card border-0 w-100">
+      <div class="text-center mb-4">
+        <div class="cx-logo mb-3"><i class="bi bi-flower3"></i></div>
+        <h1 class="h3 fw-bold mb-1"><?= $installation ? 'Installation' : 'Connexion' ?></h1>
+        <p class="text-muted mb-0"><?= $installation ? 'Créez le compte administrateur de ' . APP_NAME : 'Accédez à votre espace ' . APP_NAME ?></p>
+      </div>
+      <?= show_flash() ?>
+      <?php if ($erreur): ?><div class="alert alert-danger py-2 small" role="alert"><i class="bi bi-exclamation-circle"></i> <?= e($erreur) ?></div><?php endif; ?>
+
+      <?php if ($installation): ?>
+      <form method="post" autocomplete="off" class="cx-form"><?= csrf_field() ?>
+        <div class="form-floating mb-3"><input id="nom" name="nom" class="form-control" placeholder="Nom" required value="<?= e($_POST['nom'] ?? '') ?>" autofocus>
+          <label for="nom"><i class="bi bi-person"></i> Nom</label></div>
+        <div class="form-floating mb-3"><input id="email" type="email" name="email" class="form-control" placeholder="Adresse e-mail" required value="<?= e($email) ?>">
+          <label for="email"><i class="bi bi-envelope"></i> Adresse e-mail</label></div>
+        <div class="input-group mb-1">
+          <div class="form-floating"><input id="mdp" type="password" name="mot_de_passe" class="form-control" placeholder="Mot de passe" required minlength="<?= MDP_LONGUEUR_MIN ?>" autocomplete="new-password">
+            <label for="mdp"><i class="bi bi-lock"></i> Mot de passe</label></div>
+          <button type="button" class="btn btn-outline-secondary cx-oeil" data-cible="mdp" aria-label="Afficher le mot de passe"><i class="bi bi-eye"></i></button>
+        </div>
+        <div class="form-text mb-3"><?= MDP_LONGUEUR_MIN ?> caractères minimum, avec au moins une lettre et un chiffre.</div>
+        <div class="form-floating mb-4"><input id="conf" type="password" name="confirmation" class="form-control" placeholder="Confirmation" required autocomplete="new-password">
+          <label for="conf"><i class="bi bi-lock"></i> Confirmation du mot de passe</label></div>
+        <button class="btn btn-primary btn-lg w-100"><i class="bi bi-person-check"></i> Créer le compte administrateur</button>
       </form>
-    <?php else: ?>
-      <form method="post"><?= csrf_field() ?>
-        <div class="mb-2"><label class="form-label small" for="email">Adresse e-mail</label>
-          <input id="email" type="email" name="email" class="form-control" required value="<?= e($email) ?>" autocomplete="username" <?= $email ? '' : 'autofocus' ?>></div>
-        <div class="mb-3"><label class="form-label small" for="mdp">Mot de passe</label>
-          <div class="input-group"><input id="mdp" type="password" name="mot_de_passe" class="form-control" required autocomplete="current-password" <?= $email ? 'autofocus' : '' ?>>
-            <button type="button" class="btn btn-outline-secondary" id="voir" title="Afficher le mot de passe"><i class="bi bi-eye"></i></button></div></div>
-        <button class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-right"></i> Se connecter</button>
+
+      <?php else: ?>
+      <form method="post" class="cx-form"><?= csrf_field() ?>
+        <div class="form-floating mb-3"><input id="email" type="email" name="email" class="form-control" placeholder="Adresse e-mail" required value="<?= e($email) ?>" autocomplete="username" <?= $email ? '' : 'autofocus' ?>>
+          <label for="email"><i class="bi bi-envelope"></i> Adresse e-mail</label></div>
+        <div class="input-group mb-3">
+          <div class="form-floating"><input id="mdp" type="password" name="mot_de_passe" class="form-control" placeholder="Mot de passe" required autocomplete="current-password" <?= $email ? 'autofocus' : '' ?>>
+            <label for="mdp"><i class="bi bi-lock"></i> Mot de passe</label></div>
+          <button type="button" class="btn btn-outline-secondary cx-oeil" data-cible="mdp" aria-label="Afficher le mot de passe"><i class="bi bi-eye"></i></button>
+        </div>
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-4">
+          <div class="form-check mb-0 text-nowrap"><input class="form-check-input" type="checkbox" name="souvenir" value="1" id="souvenir" <?= !empty($_POST['souvenir']) ? 'checked' : '' ?>>
+            <label class="form-check-label" for="souvenir" title="Rester connecté <?= SOUVENIR_JOURS ?> jours sur cet appareil">Se souvenir de moi</label></div>
+          <a href="#" class="cx-lien small text-nowrap" data-bs-toggle="modal" data-bs-target="#oubli">Mot de passe oublié ?</a>
+        </div>
+        <button class="btn btn-primary btn-lg w-100"><i class="bi bi-box-arrow-in-right"></i> Se connecter</button>
       </form>
-      <p class="small text-muted text-center mt-3 mb-0">Mot de passe oublié ? Demandez à l'administrateur de le réinitialiser.</p>
-    <?php endif; ?>
-  </div>
-</main>
+      <?php endif; ?>
+    </div>
+  </main>
+</div>
+
+<!-- Mot de passe oublié -->
+<div class="modal fade" id="oubli" tabindex="-1" aria-labelledby="oubliTitre" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered"><div class="modal-content">
+    <div class="modal-header"><h2 class="modal-title h5" id="oubliTitre"><i class="bi bi-key"></i> Mot de passe oublié</h2>
+      <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Fermer"></button></div>
+    <div class="modal-body">
+      <p>Pour des raisons de sécurité, les mots de passe sont réinitialisés par l'<strong>administrateur</strong> de l'application.</p>
+      <ol class="mb-3">
+        <li>Contactez l'administrateur de votre élevage.</li>
+        <li>Il génère un <strong>mot de passe provisoire</strong> depuis la fiche de votre compte.</li>
+        <li>Connectez-vous avec ce mot de passe : vous choisirez aussitôt votre nouveau mot de passe.</li>
+      </ol>
+      <p class="small text-muted mb-0">Administrateur sans accès ? Sur le serveur : <code>php outils/reinitialiser_mot_de_passe.php votre@adresse</code>.</p>
+    </div>
+    <div class="modal-footer"><button type="button" class="btn btn-primary" data-bs-dismiss="modal">Compris</button></div>
+  </div></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-const v = document.getElementById('voir');
-if (v) v.onclick = () => { const m = document.getElementById('mdp'); m.type = m.type === 'password' ? 'text' : 'password';
-  v.firstElementChild.className = m.type === 'password' ? 'bi bi-eye' : 'bi bi-eye-slash'; };
+document.querySelectorAll('.cx-oeil').forEach(b => b.onclick = () => {
+  const m = document.getElementById(b.dataset.cible), cache = m.type === 'password';
+  m.type = cache ? 'text' : 'password';
+  b.firstElementChild.className = cache ? 'bi bi-eye-slash' : 'bi bi-eye';
+  b.setAttribute('aria-label', cache ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
+});
 </script>
 </body>
 </html>

@@ -8,7 +8,7 @@ USE troupeau;
 
 SET FOREIGN_KEY_CHECKS = 0;
 DROP VIEW IF EXISTS v_indices_resultats;
-DROP TABLE IF EXISTS journal_connexions, profil_permissions, profils, mensurations, indices_resultats, indices_interpretations, indices, alimentation, parametres_app, mouvements, sante, reproductions, controles_laitiers, pesees, animaux, lots, races, especes, utilisateurs;
+DROP TABLE IF EXISTS jetons_connexion, journal_connexions, profil_permissions, profils, mensurations, indices_resultats, indices_interpretations, indices, alimentation, parametres_app, mouvements, sante, reproductions, controles_laitiers, pesees, animaux, lots, races, especes, utilisateurs;
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- ---------------------------------------------------------------------
@@ -206,6 +206,20 @@ CREATE TABLE utilisateurs (
   derniere_connexion DATETIME NULL,
   created_at         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT fk_utilisateur_profil FOREIGN KEY (profil_id) REFERENCES profils(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- « Se souvenir de moi » (30 jours)
+CREATE TABLE jetons_connexion (
+  id              INT AUTO_INCREMENT PRIMARY KEY,
+  utilisateur_id  INT NOT NULL,
+  selecteur       CHAR(24) NOT NULL UNIQUE,
+  validateur_hash CHAR(64) NOT NULL COMMENT 'SHA-256 du validateur (jamais stocké en clair)',
+  expire_le       DATETIME NOT NULL,
+  ip              VARCHAR(45) NULL,
+  navigateur      VARCHAR(255) NULL,
+  created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_jeton_utilisateur (utilisateur_id),
+  CONSTRAINT fk_jeton_utilisateur FOREIGN KEY (utilisateur_id) REFERENCES utilisateurs(id) ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
 CREATE TABLE journal_connexions (

@@ -11,7 +11,7 @@ Application PHP 8 / MySQL / Bootstrap 5 pour bovins, ovins et caprins.
    (aucun mot de passe n'est fourni par défaut).
 
 Base déjà installée : sélectionner la base dans phpMyAdmin, puis importer dans l'ordre `migrations/001_indices.sql`,
-`migrations/002_utilisateurs.sql`, `migrations/003_mensurations.sql` et `migrations/004_profils.sql` (chacune peut être réimportée sans risque).
+`migrations/002_utilisateurs.sql`, `migrations/003_mensurations.sql`, `migrations/004_profils.sql` et `migrations/005_souvenir.sql` (chacune peut être réimportée sans risque).
 
 ## Modules
 | Page | Rôle |
@@ -114,6 +114,10 @@ indices (voir, calculer, exporter, configurer les formules) ; administration (pa
 - **Mon profil** : chacun modifie son nom, téléphone, fonction et photo ; changer d'adresse e-mail demande le mot de passe actuel.
   La page affiche aussi ses droits et ses dernières connexions.
 - Toutes les tentatives de connexion sont journalisées (date, résultat, adresse IP).
+- **Se souvenir de moi** : reste connecté 30 jours sur l'appareil. Jeton aléatoire dont seule l'empreinte SHA-256 est stockée,
+  renouvelé à chaque utilisation ; révoqué à la déconnexion, au changement ou à la réinitialisation du mot de passe et à la
+  désactivation du compte. Un jeton falsifié révoque tous ceux du compte.
+- **Mot de passe oublié** : la page de connexion explique la procédure (réinitialisation par l'administrateur).
 - Mots de passe : 8 caractères minimum avec lettre et chiffre, `password_hash()` ; mot de passe provisoire à changer ;
   5 échecs bloquent le compte 15 minutes ; session expirée après 2 h d'inactivité ; au moins un administrateur actif.
 - **Mot de passe administrateur perdu** : `php outils/reinitialiser_mot_de_passe.php adresse@exemple.fr` sur le serveur.
